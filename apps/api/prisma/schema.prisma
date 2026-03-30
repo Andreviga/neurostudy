@@ -1,0 +1,237 @@
+// NeuroStudy — Prisma Schema
+// Run: npx prisma generate && npx prisma migrate dev
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  course    String?
+  semester  Int?
+  dailyGoalMinutes Int @default(30)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subjects        Subject[]
+  materials       Material[]
+  studySessions   StudySession[]
+  learningProfile LearningProfile?
+  reviews         Review[]
+
+  @@map("users")
+}
+
+// ─── Subjects ────────────────────────────────────────────────────────────────
+
+model Subject {
+  id          String        @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  color       String        @default("#6366f1") // UI color tag
+  priority    Priority      @default(MEDIUM)
+  status      SubjectStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  materials Material[]
+  topics    Topic[]
+
+  @@map("subjects")
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum SubjectStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+}
+
+// ─── Materials ───────────────────────────────────────────────────────────────
+
+model Material {
+  id            String       @id @default(cuid())
+  userId        String
+  subjectId     String
+  title         String
+  type          MaterialType
+  fileUrl       String?
+  extractedText String?      @db.Text
+  pageCount     Int?
+  processedAt   DateTime?
+  createdAt     DateTime     @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topics  Topic[]
+
+  @@map("materials")
+}
+
+enum MaterialType {
+  PDF
+  DOCX
+  PPTX
+  TXT
+  IMAGE
+  AUDIO
+  VIDEO
+  LINK
+  TEXT
+}
+
+// ─── Topics ──────────────────────────────────────────────────────────────────
+
+model Topic {
+  id                 String     @id @default(cuid())
+  materialId         String?
+  subjectId          String
+  title              String
+  summary            String?    @db.Text
+  difficulty         Difficulty @default(MEDIUM)
+  prerequisiteTopics String[]   // array of topic IDs
+  order              Int        @default(0)
+  createdAt          DateTime   @default(now())
+
+  material      Material?      @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  subject       Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  studySessions StudySession[]
+  reviews       Review[]
+  quizItems     QuizItem[]
+  flashcards    Flashcard[]
+
+  @@map("topics")
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+  CRITICAL // needs base review first
+}
+
+// ─── Study Content ───────────────────────────────────────────────────────────
+
+model QuizItem {
+  id            String   @id @default(cuid())
+  topicId       String
+  question      String
+  options       String[] // JSON array of 4 options
+  correctIndex  Int      // 0-3
+  explanation   String?
+  createdAt     DateTime @default(now())
+
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@map("quiz_items")
+}
+
+model Flashcard {
+  id        String   @id @default(cuid())
+  topicId   String
+  front     String
+  back      String
+  createdAt DateTime @default(now())
+
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@map("flashcards")
+}
+
+// ─── Study Sessions ──────────────────────────────────────────────────────────
+
+model StudySession {
+  id             String        @id @default(cuid())
+  userId         String
+  topicId        String
+  format         StudyFormat
+  durationSecs   Int           @default(0)
+  completionRate Float         @default(0) // 0-1
+  score          Float?        // 0-1 (quiz score)
+  aiProvider     String?       // openai | anthropic | gemini
+  aiModel        String?
+  createdAt      DateTime      @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@map("study_sessions")
+}
+
+enum StudyFormat {
+  SUMMARY_SHORT
+  SUMMARY_MEDIUM
+  SUMMARY_DETAILED
+  STEP_BY_STEP
+  ANALOGY
+  PRACTICAL_EXAMPLE
+  QUIZ
+  FLASHCARD
+  GUIDED_QUESTIONS
+  MIND_MAP
+}
+
+// ─── Reviews (Spaced Repetition) ─────────────────────────────────────────────
+
+model Review {
+  id             String   @id @default(cuid())
+  userId         String
+  topicId        String
+  nextReviewDate DateTime
+  retentionScore Float    @default(0.5) // 0-1
+  reviewCount    Int      @default(0)
+  easeFactor     Float    @default(2.5) // SM-2 algorithm
+  interval       Int      @default(1)   // days until next review
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicId])
+  @@map("reviews")
+}
+
+// ─── Learning Profile ────────────────────────────────────────────────────────
+
+model LearningProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  // Most effective formats ranked by performance
+  preferredFormats  String[] // StudyFormat values ordered by effectiveness
+  // Topics where user consistently struggles
+  weakTopics        String[] // topic IDs
+  // Best performance window: "morning" | "afternoon" | "evening" | "night"
+  peakHour          String   @default("evening")
+  avgSessionMins    Int      @default(20)
+  // Aggregate retention per format (JSON map: {format: score})
+  retentionByFormat Json     @default("{}")
+  // Engagement metrics
+  totalSessions     Int      @default(0)
+  totalMinsStudied  Int      @default(0)
+  streakDays        Int      @default(0)
+  lastStudiedAt     DateTime?
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("learning_profiles")
+}

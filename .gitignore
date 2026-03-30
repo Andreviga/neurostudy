@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+.next/
+out/
+build/
+
+# Environment files — NEVER commit real secrets
+.env
+.env.local
+.env.development
+.env.production
+# Keep examples
+!.env.example
+!.env.local.example
+
+# Uploads (local storage)
+apps/api/uploads/
+
+# Prisma generated client
+apps/api/node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
