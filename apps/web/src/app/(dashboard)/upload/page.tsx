@@ -149,7 +149,11 @@ export default function UploadPage() {
                     </div>
                     {item.status === 'uploading' && <Loader2 className="w-4 h-4 text-brand-500 animate-spin" />}
                     {item.status === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-                    {item.status === 'error' && <AlertCircle className="w-4 h-4 text-red-500" title={item.error} />}
+                    {item.status === 'error' && (
+                      <span title={item.error}>
+                        <AlertCircle className="w-4 h-4 text-red-500" />
+                      </span>
+                    )}
                     {item.status === 'pending' && (
                       <button onClick={() => setQueue((prev) => prev.filter((q) => q.id !== item.id))} className="text-slate-300 hover:text-slate-500">
                         <X className="w-4 h-4" />
