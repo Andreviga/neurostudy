@@ -54,6 +54,11 @@ app.use('/api/profile', profileRouter);
 
 // Root route
 app.get('/', (_req, res) => {
+  const webUrl = process.env.WEB_URL;
+  if (webUrl) {
+    res.redirect(webUrl);
+    return;
+  }
   res.json({ service: 'neurostudy-api', status: 'ok' });
 });
 
