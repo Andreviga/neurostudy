@@ -53,13 +53,25 @@ app.use('/api/reviews', reviewsRouter);
 app.use('/api/profile', profileRouter);
 
 // Root route
-app.get('/', (_req, res) => {
+app.get('/', (req, res) => {
   const webUrl = process.env.WEB_URL;
   if (webUrl) {
     res.redirect(webUrl);
     return;
   }
-  res.json({ service: 'neurostudy-api', status: 'ok' });
+
+  const host = req.get('host');
+  if (host?.includes('neurostudy-api')) {
+    const inferredWebUrl = `https://${host.replace('neurostudy-api', 'neurostudy-web')}`;
+    res.redirect(inferredWebUrl);
+    return;
+  }
+
+  res.json({
+    service: 'neurostudy-api',
+    status: 'ok',
+    message: 'Configure WEB_URL para redirecionar para o frontend.',
+  });
 });
 
 // Health check
