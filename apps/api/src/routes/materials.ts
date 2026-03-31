@@ -1,7 +1,8 @@
-import { Router, Response } from 'express';
-import multer from 'multer';
+import { Router, Request, Response } from 'express';
+import multer, { FileFilterCallback } from 'multer';
 import path from 'path';
 import { v4 as uuid } from 'uuid';
+import { MaterialType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { extractTextFromPDF } from '../services/pdf';
@@ -15,12 +16,13 @@ router.use(authenticate);
 // Multer config
 const storage = multer.diskStorage({
   destination: process.env.LOCAL_UPLOAD_DIR || './uploads',
-  filename: (_req, file, cb) => cb(null, `${uuid()}${path.extname(file.originalname)}`),
+  filename: (_req: Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) =>
+    cb(null, `${uuid()}${path.extname(file.originalname)}`),
 });
 const upload = multer({
   storage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
     const allowed = ['.pdf', '.docx', '.pptx', '.txt', '.md', '.png', '.jpg', '.jpeg'];
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, allowed.includes(ext));
@@ -123,13 +125,13 @@ async function processMaterial(materialId: string, filePath: string, type: strin
   }
 }
 
-function extToType(ext: string): string {
-  const map: Record<string, string> = {
+function extToType(ext: string): MaterialType {
+  const map: Record<string, MaterialType> = {
     '.pdf': 'PDF', '.docx': 'DOCX', '.pptx': 'PPTX',
     '.txt': 'TXT', '.md': 'TXT',
     '.png': 'IMAGE', '.jpg': 'IMAGE', '.jpeg': 'IMAGE',
   };
-  return map[ext] || 'TEXT';
+  return map[ext] ?? 'TEXT';
 }
 
 export default router;

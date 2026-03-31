@@ -1,9 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-export interface AuthRequest extends Request {
-  userId?: string;
+// Extend Express Request via declaration merging so all properties (params, body, query, file) remain visible
+declare global {
+  namespace Express {
+    interface Request {
+      userId?: string;
+    }
+  }
 }
+
+export type AuthRequest = Request;
 
 export function authenticate(req: AuthRequest, res: Response, next: NextFunction): void {
   const header = req.headers.authorization;
