@@ -18,10 +18,17 @@ import profileRouter from './routes/profile';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const isVercel = process.env.VERCEL === '1';
 
 // ─── Ensure upload dir exists ────────────────────────────────────────────────
-const uploadDir = process.env.LOCAL_UPLOAD_DIR || './uploads';
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+const uploadDir = process.env.LOCAL_UPLOAD_DIR || (isVercel ? '/tmp/uploads' : './uploads');
+if (!fs.existsSync(uploadDir)) {
+  try {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  } catch (error) {
+    logger.warn('Could not create upload directory', { uploadDir, error: (error as Error).message });
+  }
+}
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(helmet());
@@ -54,8 +61,10 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.listen(PORT, () => {
-  logger.info(`API running on http://localhost:${PORT}`);
-});
+if (!isVercel) {
+  app.listen(PORT, () => {
+    logger.info(`API running on http://localhost:${PORT}`);
+  });
+}
 
 export default app;
