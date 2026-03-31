@@ -52,6 +52,11 @@ app.use('/api/sessions', sessionsRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/profile', profileRouter);
 
+// Root route
+app.get('/', (_req, res) => {
+  res.json({ service: 'neurostudy-api', status: 'ok' });
+});
+
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
