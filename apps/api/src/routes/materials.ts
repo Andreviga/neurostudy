@@ -2,7 +2,8 @@ import { Router, Request, Response } from 'express';
 import multer, { FileFilterCallback } from 'multer';
 import path from 'path';
 import { v4 as uuid } from 'uuid';
-import { MaterialType } from '@prisma/client';
+// Local type mirrors the Prisma enum — avoids needing generated client at compile time
+type MaterialType = 'PDF' | 'DOCX' | 'PPTX' | 'TXT' | 'IMAGE' | 'AUDIO' | 'VIDEO' | 'LINK' | 'TEXT';
 import { prisma } from '../lib/prisma';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { extractTextFromPDF } from '../services/pdf';

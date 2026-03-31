@@ -12,9 +12,25 @@
  * - Track streak and total study time
  */
 
-import { LearningProfile, StudySession } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { StudyFormat } from './ai';
+
+// Local types to avoid depending on generated Prisma client at compile time
+interface StudySession {
+  topicId: string;
+  format: string;
+  score: number | null;
+  completionRate: number;
+  durationSecs: number;
+}
+
+interface LearningProfile {
+  preferredFormats: string[];
+  weakTopics: string[];
+  streakDays: number;
+  lastStudiedAt: Date | null;
+  retentionByFormat: unknown;
+}
 
 interface RetentionMap {
   [format: string]: { total: number; count: number };
@@ -46,13 +62,13 @@ export async function updateLearningProfile(userId: string, session: StudySessio
     take: 3,
   });
   const avgRecentScore =
-    recentSessions.reduce((sum, s) => sum + (s.score ?? s.completionRate), 0) / recentSessions.length;
+    recentSessions.reduce((sum: number, s) => sum + (s.score ?? s.completionRate), 0) / recentSessions.length;
 
   let weakTopics = profile.weakTopics;
   if (avgRecentScore < 0.5 && !weakTopics.includes(session.topicId)) {
     weakTopics = [...weakTopics, session.topicId];
   } else if (avgRecentScore >= 0.7) {
-    weakTopics = weakTopics.filter((id) => id !== session.topicId);
+    weakTopics = weakTopics.filter((id: string) => id !== session.topicId);
   }
 
   // Update streak

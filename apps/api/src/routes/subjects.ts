@@ -28,7 +28,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
   // Compute completion % per subject (topics studied at least once)
   const enriched = await Promise.all(
-    subjects.map(async (s) => {
+    subjects.map(async (s: typeof subjects[number]) => {
       const totalTopics = s._count.topics;
       const studiedTopics = await prisma.studySession.findMany({
         where: { userId: req.userId!, topic: { subjectId: s.id } },
