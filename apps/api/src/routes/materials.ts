@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import multer, { FileFilterCallback } from 'multer';
 import path from 'path';
+import fs from 'fs';
 import { v4 as uuid } from 'uuid';
 // Local type mirrors the Prisma enum — avoids needing generated client at compile time
 type MaterialType = 'PDF' | 'DOCX' | 'PPTX' | 'TXT' | 'IMAGE' | 'AUDIO' | 'VIDEO' | 'LINK' | 'TEXT';
@@ -15,8 +16,20 @@ const router = Router();
 router.use(authenticate);
 
 // Multer config
+const isVercel = process.env.VERCEL === '1';
+const uploadDir = process.env.LOCAL_UPLOAD_DIR || (isVercel ? '/tmp/uploads' : './uploads');
+
 const storage = multer.diskStorage({
-  destination: process.env.LOCAL_UPLOAD_DIR || './uploads',
+  destination: (_req: Request, _file: Express.Multer.File, cb: (error: Error | null, destination: string) => void) => {
+    try {
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      cb(null, uploadDir);
+    } catch (error) {
+      cb(error as Error, uploadDir);
+    }
+  },
   filename: (_req: Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) =>
     cb(null, `${uuid()}${path.extname(file.originalname)}`),
 });
