@@ -1,16 +1,16 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { GenerateContentInput, GenerateContentOutput, TopicData } from './index';
 import { buildGeneratePrompt, buildTopicExtractionPrompt } from './prompts';
 
-let client: Anthropic | null = null;
+let client: unknown = null;
 
-function getClient(): Anthropic {
-  if (client) return client;
+async function getClient() {
+  if (client) return client as { messages: { create: Function } };
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY is not configured');
   }
+  const Anthropic = (await import('@anthropic-ai/sdk')).default;
   client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  return client;
+  return client as { messages: { create: Function } };
 }
 
 const MODEL = 'claude-haiku-4-5-20251001'; // Fast + affordable; swap to claude-sonnet-4-6 for quality
@@ -19,7 +19,8 @@ export const anthropicService = {
   async generate(input: GenerateContentInput): Promise<GenerateContentOutput> {
     const prompt = buildGeneratePrompt(input.topicTitle, input.topicSummary, input.materialText, input.format);
 
-    const response = await getClient().messages.create({
+    const anthropic = await getClient();
+    const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 2000,
       system: 'Você é um tutor educacional especializado. Responda sempre em português brasileiro. Seja didático, claro e engajante.',
@@ -46,7 +47,8 @@ export const anthropicService = {
 
   async extractTopics(text: string): Promise<TopicData[]> {
     const prompt = buildTopicExtractionPrompt(text);
-    const response = await getClient().messages.create({
+    const anthropic = await getClient();
+    const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 1500,
       system: 'You are a curriculum expert. Extract study topics and respond with valid JSON only.',

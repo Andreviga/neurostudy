@@ -1,16 +1,16 @@
-import OpenAI from 'openai';
 import { GenerateContentInput, GenerateContentOutput, TopicData } from './index';
 import { buildGeneratePrompt, buildTopicExtractionPrompt } from './prompts';
 
-let client: OpenAI | null = null;
+let client: unknown = null;
 
-function getClient(): OpenAI {
-  if (client) return client;
+async function getClient() {
+  if (client) return client as { chat: { completions: { create: Function } } };
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is not configured');
   }
+  const OpenAI = (await import('openai')).default;
   client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  return client;
+  return client as { chat: { completions: { create: Function } } };
 }
 
 const MODEL = 'gpt-4o-mini';
@@ -19,7 +19,8 @@ export const openaiService = {
   async generate(input: GenerateContentInput): Promise<GenerateContentOutput> {
     const prompt = buildGeneratePrompt(input.topicTitle, input.topicSummary, input.materialText, input.format);
 
-    const response = await getClient().chat.completions.create({
+    const openai = await getClient();
+    const response = await openai.chat.completions.create({
       model: MODEL,
       messages: [
         {
@@ -59,7 +60,8 @@ export const openaiService = {
 
   async extractTopics(text: string): Promise<TopicData[]> {
     const prompt = buildTopicExtractionPrompt(text);
-    const response = await getClient().chat.completions.create({
+    const openai = await getClient();
+    const response = await openai.chat.completions.create({
       model: MODEL,
       messages: [
         { role: 'system', content: 'You are a curriculum expert. Extract study topics and respond with valid JSON only.' },
