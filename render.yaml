@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: neurostudy-api
+    runtime: node
+    rootDir: apps/api
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && node dist/index.js
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: DATABASE_URL
+        sync: false          # você vai colar a URL do Neon
+      - key: JWT_SECRET
+        generateValue: true  # Render gera automaticamente
+      - key: DEFAULT_AI_PROVIDER
+        value: openai
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: STORAGE_PROVIDER
+        value: local
+      - key: LOCAL_UPLOAD_DIR
+        value: ./uploads
+      - key: WEB_URL
+        sync: false          # você vai colar a URL do Vercel depois
