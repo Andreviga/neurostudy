@@ -28,8 +28,8 @@ async function uploadToS3(localPath: string, filename: string): Promise<string> 
     })
   );
 
-  // Clean up local temp file after upload
-  fs.unlink(localPath, () => {});
+  // NOTE: do NOT delete the local file here — processMaterial() still needs it
+  // for text extraction. The caller is responsible for cleanup after processing.
 
   return `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/uploads/${filename}`;
 }

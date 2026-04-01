@@ -12,6 +12,9 @@
     "db:seed": "npm run db:seed --workspace=apps/api",
     "db:studio": "npm run db:studio --workspace=apps/api"
   },
+  "dependencies": {
+    "next": "14.2.5"
+  },
   "devDependencies": {
     "concurrently": "^8.2.2"
   }

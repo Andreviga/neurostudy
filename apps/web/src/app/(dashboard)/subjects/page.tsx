@@ -35,9 +35,13 @@ export default function SubjectsPage() {
 
   async function remove(id: string) {
     if (!confirm('Remover esta disciplina e todos os seus materiais?')) return;
-    await subjectsApi.delete(id);
-    setSubjects((prev) => prev.filter((s) => s.id !== id));
-    toast.success('Disciplina removida');
+    try {
+      await subjectsApi.delete(id);
+      setSubjects((prev) => prev.filter((s) => s.id !== id));
+      toast.success('Disciplina removida');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao remover disciplina');
+    }
   }
 
   const priorityOrder: Record<Priority, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };

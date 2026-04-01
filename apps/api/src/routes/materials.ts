@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import multer, { FileFilterCallback } from 'multer';
 import path from 'path';
+import fs from 'fs';
 import { v4 as uuid } from 'uuid';
 // Local type mirrors the Prisma enum — avoids needing generated client at compile time
 type MaterialType = 'PDF' | 'DOCX' | 'PPTX' | 'TXT' | 'IMAGE' | 'AUDIO' | 'VIDEO' | 'LINK' | 'TEXT';
@@ -10,6 +11,7 @@ import { extractTextFromPDF } from '../services/pdf';
 import { generateTopicsFromText } from '../services/ai';
 import { uploadFile } from '../services/storage';
 import { logger } from '../lib/logger';
+import { asyncHandler } from '../lib/async-handler';
 
 const router = Router();
 router.use(authenticate);
@@ -31,7 +33,7 @@ const upload = multer({
 });
 
 // POST /api/materials/upload
-router.post('/upload', upload.single('file'), async (req: AuthRequest, res: Response) => {
+router.post('/upload', upload.single('file'), asyncHandler(async (req: AuthRequest, res: Response) => {
   if (!req.file) { res.status(400).json({ error: 'No file uploaded' }); return; }
   const { subjectId, title } = req.body;
   if (!subjectId) { res.status(400).json({ error: 'subjectId is required' }); return; }
@@ -60,10 +62,10 @@ router.post('/upload', upload.single('file'), async (req: AuthRequest, res: Resp
   );
 
   res.status(202).json({ ...material, status: 'processing' });
-});
+}));
 
 // POST /api/materials/text  — paste raw text
-router.post('/text', async (req: AuthRequest, res: Response) => {
+router.post('/text', asyncHandler(async (req: AuthRequest, res: Response) => {
   const { subjectId, title, text } = req.body;
   if (!subjectId || !text) { res.status(400).json({ error: 'subjectId and text are required' }); return; }
 
@@ -86,25 +88,25 @@ router.post('/text', async (req: AuthRequest, res: Response) => {
   );
 
   res.status(202).json({ ...material, status: 'processing' });
-});
+}));
 
 // GET /api/materials/:id
-router.get('/:id', async (req: AuthRequest, res: Response) => {
+router.get('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
   const material = await prisma.material.findFirst({
     where: { id: req.params.id, userId: req.userId! },
     include: { topics: { orderBy: { order: 'asc' } } },
   });
   if (!material) { res.status(404).json({ error: 'Material not found' }); return; }
   res.json(material);
-});
+}));
 
 // DELETE /api/materials/:id
-router.delete('/:id', async (req: AuthRequest, res: Response) => {
+router.delete('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
   const m = await prisma.material.findFirst({ where: { id: req.params.id, userId: req.userId! } });
   if (!m) { res.status(404).json({ error: 'Material not found' }); return; }
   await prisma.material.delete({ where: { id: req.params.id } });
   res.status(204).send();
-});
+}));
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -118,6 +120,19 @@ async function processMaterial(materialId: string, filePath: string, type: strin
       where: { id: materialId },
       data: { extractedText: text, pageCount: result.pages, processedAt: new Date() },
     });
+  }
+
+  if (type === 'TXT') {
+    text = fs.readFileSync(filePath, 'utf-8').trim();
+    await prisma.material.update({
+      where: { id: materialId },
+      data: { extractedText: text, processedAt: new Date() },
+    });
+  }
+
+  // Clean up local file after processing if using S3 (uploaded file no longer needed)
+  if (process.env.STORAGE_PROVIDER === 's3') {
+    fs.unlink(filePath, () => {});
   }
 
   if (text.length > 100) {

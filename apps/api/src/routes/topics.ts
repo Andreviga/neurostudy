@@ -4,12 +4,13 @@ import { prisma } from '../lib/prisma';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { generateContent } from '../services/ai';
 import { logger } from '../lib/logger';
+import { asyncHandler } from '../lib/async-handler';
 
 const router = Router();
 router.use(authenticate);
 
 // GET /api/topics?subjectId=...
-router.get('/', async (req: AuthRequest, res: Response) => {
+router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
   const { subjectId } = req.query;
   const topics = await prisma.topic.findMany({
     where: {
@@ -22,10 +23,10 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     orderBy: { order: 'asc' },
   });
   res.json(topics);
-});
+}));
 
 // GET /api/topics/:id
-router.get('/:id', async (req: AuthRequest, res: Response) => {
+router.get('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
   const topic = await prisma.topic.findFirst({
     where: { id: req.params.id, subject: { userId: req.userId! } },
     include: {
@@ -37,7 +38,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
   });
   if (!topic) { res.status(404).json({ error: 'Topic not found' }); return; }
   res.json(topic);
-});
+}));
 
 const generateSchema = z.object({
   format: z.enum([
@@ -49,7 +50,7 @@ const generateSchema = z.object({
 });
 
 // POST /api/topics/:id/generate — generate study content for a format
-router.post('/:id/generate', async (req: AuthRequest, res: Response) => {
+router.post('/:id/generate', asyncHandler(async (req: AuthRequest, res: Response) => {
   const parsed = generateSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
 
@@ -90,6 +91,6 @@ router.post('/:id/generate', async (req: AuthRequest, res: Response) => {
     logger.error('Content generation failed', { topicId: topic.id, format, error: message });
     res.status(500).json({ error: 'Failed to generate content' });
   }
-});
+}));
 
 export default router;

@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { asyncHandler } from '../lib/async-handler';
 
 const router = Router();
 router.use(authenticate);
@@ -14,7 +15,7 @@ const subjectSchema = z.object({
 });
 
 // GET /api/subjects
-router.get('/', async (req: AuthRequest, res: Response) => {
+router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
   const subjects = await prisma.subject.findMany({
     where: { userId: req.userId! },
     include: {
@@ -40,10 +41,10 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   );
 
   res.json(enriched);
-});
+}));
 
 // POST /api/subjects
-router.post('/', async (req: AuthRequest, res: Response) => {
+router.post('/', asyncHandler(async (req: AuthRequest, res: Response) => {
   const parsed = subjectSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
 
@@ -51,10 +52,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     data: { ...parsed.data, userId: req.userId! },
   });
   res.status(201).json(subject);
-});
+}));
 
 // GET /api/subjects/:id
-router.get('/:id', async (req: AuthRequest, res: Response) => {
+router.get('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
   const subject = await prisma.subject.findFirst({
     where: { id: req.params.id, userId: req.userId! },
     include: {
@@ -67,10 +68,10 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
   });
   if (!subject) { res.status(404).json({ error: 'Subject not found' }); return; }
   res.json(subject);
-});
+}));
 
 // PATCH /api/subjects/:id
-router.patch('/:id', async (req: AuthRequest, res: Response) => {
+router.patch('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
   const exists = await prisma.subject.findFirst({ where: { id: req.params.id, userId: req.userId! } });
   if (!exists) { res.status(404).json({ error: 'Subject not found' }); return; }
 
@@ -79,15 +80,15 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
 
   const updated = await prisma.subject.update({ where: { id: req.params.id }, data: parsed.data });
   res.json(updated);
-});
+}));
 
 // DELETE /api/subjects/:id
-router.delete('/:id', async (req: AuthRequest, res: Response) => {
+router.delete('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
   const exists = await prisma.subject.findFirst({ where: { id: req.params.id, userId: req.userId! } });
   if (!exists) { res.status(404).json({ error: 'Subject not found' }); return; }
 
   await prisma.subject.delete({ where: { id: req.params.id } });
   res.status(204).send();
-});
+}));
 
 export default router;
