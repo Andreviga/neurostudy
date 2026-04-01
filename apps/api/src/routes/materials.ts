@@ -24,9 +24,9 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB
   fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-    const allowed = ['.pdf', '.docx', '.pptx', '.txt', '.md', '.png', '.jpg', '.jpeg'];
+    const allowed = ['.pdf', '.docx', '.pptx', '.txt', '.md', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.mp4', '.mov', '.webm', '.avi', '.mkv'];
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, allowed.includes(ext));
   },
@@ -90,6 +90,58 @@ router.post('/text', asyncHandler(async (req: AuthRequest, res: Response) => {
   res.status(202).json({ ...material, status: 'processing' });
 }));
 
+// POST /api/materials/url  — import from a web page
+router.post('/url', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { subjectId, url, title } = req.body as { subjectId?: string; url?: string; title?: string };
+  if (!subjectId || !url) { res.status(400).json({ error: 'subjectId and url are required' }); return; }
+
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { res.status(400).json({ error: 'Invalid URL' }); return; }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    res.status(400).json({ error: 'Only HTTP/HTTPS URLs are supported' }); return;
+  }
+  if (isPrivateHost(parsed.hostname)) {
+    res.status(400).json({ error: 'Private/local URLs are not allowed' }); return;
+  }
+
+  const subject = await prisma.subject.findFirst({ where: { id: subjectId, userId: req.userId! } });
+  if (!subject) { res.status(404).json({ error: 'Subject not found' }); return; }
+
+  let html: string;
+  try {
+    const resp = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NeuroStudyBot/1.0)' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    html = await resp.text();
+  } catch (err: unknown) {
+    res.status(422).json({ error: `Could not fetch URL: ${err instanceof Error ? err.message : 'Unknown error'}` });
+    return;
+  }
+
+  const text = extractTextFromHtml(html);
+  if (text.length < 100) { res.status(422).json({ error: 'Not enough text content found on this page' }); return; }
+
+  const material = await prisma.material.create({
+    data: {
+      userId: req.userId!,
+      subjectId,
+      title: title || extractPageTitle(html) || url,
+      type: 'LINK',
+      fileUrl: url,
+      extractedText: text,
+      processedAt: new Date(),
+    },
+  });
+
+  generateTopicsFromText(material.id, text, subjectId, req.userId!).catch((err) =>
+    logger.error('Topic generation failed', { materialId: material.id, err: err.message })
+  );
+
+  res.status(202).json({ ...material, status: 'processing' });
+}));
+
 // GET /api/materials/:id
 router.get('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
   const material = await prisma.material.findFirst({
@@ -130,6 +182,13 @@ async function processMaterial(materialId: string, filePath: string, type: strin
     });
   }
 
+  if (type === 'IMAGE' || type === 'VIDEO') {
+    await prisma.material.update({
+      where: { id: materialId },
+      data: { processedAt: new Date() },
+    });
+  }
+
   // Clean up local file after processing if using S3 (uploaded file no longer needed)
   if (process.env.STORAGE_PROVIDER === 's3') {
     fs.unlink(filePath, () => {});
@@ -141,11 +200,42 @@ async function processMaterial(materialId: string, filePath: string, type: strin
   }
 }
 
+function extractTextFromHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractPageTitle(html: string): string {
+  return html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() ?? '';
+}
+
+function isPrivateHost(hostname: string): boolean {
+  if (hostname === 'localhost') return true;
+  const parts = hostname.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(isNaN)) return false;
+  return (
+    parts[0] === 10 ||
+    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+    (parts[0] === 192 && parts[1] === 168) ||
+    parts[0] === 127
+  );
+}
+
 function extToType(ext: string): MaterialType {
   const map: Record<string, MaterialType> = {
     '.pdf': 'PDF', '.docx': 'DOCX', '.pptx': 'PPTX',
     '.txt': 'TXT', '.md': 'TXT',
-    '.png': 'IMAGE', '.jpg': 'IMAGE', '.jpeg': 'IMAGE',
+    '.png': 'IMAGE', '.jpg': 'IMAGE', '.jpeg': 'IMAGE', '.gif': 'IMAGE', '.webp': 'IMAGE',
+    '.mp4': 'VIDEO', '.mov': 'VIDEO', '.webm': 'VIDEO', '.avi': 'VIDEO', '.mkv': 'VIDEO',
   };
   return map[ext] ?? 'TEXT';
 }

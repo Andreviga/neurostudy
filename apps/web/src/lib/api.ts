@@ -69,6 +69,8 @@ export const materialsApi = {
   },
   pasteText: (data: { subjectId: string; title: string; text: string }) =>
     request<import('@/types').Material>('/api/materials/text', { method: 'POST', body: JSON.stringify(data) }),
+  url: (data: { subjectId: string; url: string; title?: string }) =>
+    request<import('@/types').Material>('/api/materials/url', { method: 'POST', body: JSON.stringify(data) }),
   get: (id: string) => request<import('@/types').Material>(`/api/materials/${id}`),
 };
 
