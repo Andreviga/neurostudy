@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { BarChart2, Clock, Target, TrendingUp, BookOpen } from 'lucide-react';
 import { sessionsApi, subjectsApi, profileApi } from '@/lib/api';
-import { cn, formatDuration, formatScore } from '@/lib/utils';
+import { cn, formatDuration, formatScore, formatLabel } from '@/lib/utils';
 import type { SessionStats, Subject, LearningProfile } from '@/types';
 
 export default function ProgressPage() {
@@ -128,7 +128,7 @@ export default function ProgressPage() {
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Próximo formato recomendado</span>
                 <span className="font-medium text-brand-600">
-                  {{ QUIZ: 'Quiz', FLASHCARD: 'Flashcard', SUMMARY_SHORT: 'Resumo rápido', SUMMARY_MEDIUM: 'Resumo médio' }[profile.recommendedFormat] || profile.recommendedFormat}
+                  {formatLabel[profile.recommendedFormat] ?? profile.recommendedFormat}
                 </span>
               </div>
             </div>
