@@ -60,7 +60,7 @@ app.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date()
 // ─── Error handler ────────────────────────────────────────────────────────────
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   logger.error('Unhandled error', { message: err.message, stack: err.stack });
-  res.status(500).json({ error: 'Internal server error', detail: err.message });
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 app.listen(PORT, () => {
