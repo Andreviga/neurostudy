@@ -36,6 +36,7 @@ Checklist rápido:
 - No Render, confirme que o serviço está apontando para a mesma branch.
 - Clique em **Manual Deploy > Deploy latest commit** depois do push.
 - Se usar Blueprint (`render.yaml`), faça **Sync Blueprint** para aplicar mudanças de serviço/env.
+- Defina `WEB_URL` no serviço da API com a URL pública do frontend no Render (ex.: `https://<seu-web>.onrender.com`).
 
 > Sem push para o remoto, o Render não consegue listar commits locais.
 

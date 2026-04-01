@@ -67,8 +67,11 @@ app.get('/', (req, res) => {
     return;
   }
 
-  // Render fallback when WEB_URL is not configured
-  res.redirect('https://neurostudy-web.onrender.com');
+  res.status(200).json({
+    service: 'neurostudy-api',
+    status: 'ok',
+    detail: 'Configure WEB_URL com a URL pública do frontend no Render para habilitar redirecionamento.',
+  });
 });
 
 // Health check

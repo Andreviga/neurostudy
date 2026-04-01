@@ -30,7 +30,7 @@ services:
       - key: LOCAL_UPLOAD_DIR
         value: /tmp/uploads
       - key: WEB_URL
-        value: https://neurostudy-web.onrender.com
+        sync: false
 
   - type: web
     name: neurostudy-web
