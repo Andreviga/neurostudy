@@ -67,6 +67,12 @@ app.get('/', (req, res) => {
     return;
   }
 
+  const renderExternalUrl = process.env.RENDER_EXTERNAL_URL;
+  if (renderExternalUrl?.includes('-api')) {
+    res.redirect(renderExternalUrl.replace('-api', '-web'));
+    return;
+  }
+
   res.status(200).json({
     service: 'neurostudy-api',
     status: 'ok',
