@@ -4,7 +4,7 @@ services:
     runtime: node
     rootDir: apps/api
     buildCommand: npm install && npx prisma generate && npm run build
-    startCommand: npx prisma migrate deploy && node dist/index.js
+    startCommand: npx prisma db push && node dist/index.js
     plan: free
     envVars:
       - key: NODE_ENV
