@@ -1,12 +1,13 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { asyncHandler } from '../lib/async-handler';
 
 const router = Router();
 router.use(authenticate);
 
 // GET /api/reviews/due — topics due for review today
-router.get('/due', async (req: AuthRequest, res: Response) => {
+router.get('/due', asyncHandler(async (req: AuthRequest, res: Response) => {
   const reviews = await prisma.review.findMany({
     where: {
       userId: req.userId!,
@@ -24,10 +25,10 @@ router.get('/due', async (req: AuthRequest, res: Response) => {
     take: 10,
   });
   res.json(reviews);
-});
+}));
 
 // GET /api/reviews — all reviews for the user
-router.get('/', async (req: AuthRequest, res: Response) => {
+router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
   const reviews = await prisma.review.findMany({
     where: { userId: req.userId! },
     include: {
@@ -36,6 +37,6 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     orderBy: { nextReviewDate: 'asc' },
   });
   res.json(reviews);
-});
+}));
 
 export default router;

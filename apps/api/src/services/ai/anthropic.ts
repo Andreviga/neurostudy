@@ -3,7 +3,7 @@ import { GenerateContentInput, GenerateContentOutput, TopicData } from './index'
 import { buildGeneratePrompt, buildTopicExtractionPrompt } from './prompts';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = 'claude-haiku-4-5-20251001'; // Fast + affordable; swap to claude-sonnet-4-6 for quality
+const MODEL = 'claude-3-haiku-20240307'; // Fast + affordable; swap to claude-3-5-sonnet-20241022 for quality
 
 export const anthropicService = {
   async generate(input: GenerateContentInput): Promise<GenerateContentOutput> {

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
+import { asyncHandler } from '../lib/async-handler';
 
 const router = Router();
 
@@ -26,7 +27,7 @@ function signToken(userId: string) {
 }
 
 // POST /api/auth/signup
-router.post('/signup', async (req: Request, res: Response) => {
+router.post('/signup', asyncHandler(async (req: Request, res: Response) => {
   const parsed = signupSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -56,10 +57,10 @@ router.post('/signup', async (req: Request, res: Response) => {
     token,
     user: { id: user.id, name: user.name, email: user.email, course: user.course },
   });
-});
+}));
 
 // POST /api/auth/login
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', asyncHandler(async (req: Request, res: Response) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -84,7 +85,7 @@ router.post('/login', async (req: Request, res: Response) => {
     token,
     user: { id: user.id, name: user.name, email: user.email, course: user.course },
   });
-});
+}));
 
 // GET /api/auth/me
 router.get('/me', async (req: Request, res: Response) => {

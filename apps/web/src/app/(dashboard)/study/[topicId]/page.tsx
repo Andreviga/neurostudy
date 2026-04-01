@@ -15,6 +15,7 @@ import type { Topic, StudyFormat, GeneratedContent, QuizItem, Flashcard } from '
 const FORMAT_OPTIONS: { value: StudyFormat; label: string; emoji: string }[] = [
   { value: 'SUMMARY_SHORT', label: 'Resumo rápido', emoji: '⚡' },
   { value: 'SUMMARY_MEDIUM', label: 'Resumo médio', emoji: '📄' },
+  { value: 'SUMMARY_DETAILED', label: 'Resumo detalhado', emoji: '📚' },
   { value: 'STEP_BY_STEP', label: 'Passo a passo', emoji: '🪜' },
   { value: 'ANALOGY', label: 'Analogia', emoji: '🧩' },
   { value: 'PRACTICAL_EXAMPLE', label: 'Exemplo prático', emoji: '🔬' },

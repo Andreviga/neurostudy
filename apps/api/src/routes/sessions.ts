@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { updateLearningProfile } from '../services/learning-profile';
+import { asyncHandler } from '../lib/async-handler';
 
 const router = Router();
 router.use(authenticate);
@@ -22,7 +23,7 @@ const sessionSchema = z.object({
 });
 
 // POST /api/sessions — record a completed study session
-router.post('/', async (req: AuthRequest, res: Response) => {
+router.post('/', asyncHandler(async (req: AuthRequest, res: Response) => {
   const parsed = sessionSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
 
@@ -42,10 +43,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   updateLearningProfile(req.userId!, session).catch(() => {});
 
   res.status(201).json(session);
-});
+}));
 
 // GET /api/sessions — history
-router.get('/', async (req: AuthRequest, res: Response) => {
+router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
   const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
   const sessions = await prisma.studySession.findMany({
     where: { userId: req.userId! },
@@ -54,10 +55,10 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     take: limit,
   });
   res.json(sessions);
-});
+}));
 
 // GET /api/sessions/stats — aggregated stats for dashboard
-router.get('/stats', async (req: AuthRequest, res: Response) => {
+router.get('/stats', asyncHandler(async (req: AuthRequest, res: Response) => {
   const [totalSessions, totalMins, avgScore, bySubject] = await Promise.all([
     prisma.studySession.count({ where: { userId: req.userId! } }),
     prisma.studySession.aggregate({
@@ -69,13 +70,15 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
       _avg: { score: true },
     }),
     // Sessions per subject last 7 days
+    // NOTE: Prisma maps fields to their exact camelCase names in PostgreSQL
+    // so column names must be quoted (e.g. "userId", "createdAt")
     prisma.$queryRaw`
       SELECT s.name as subject, COUNT(ss.id)::int as sessions
       FROM study_sessions ss
-      JOIN topics t ON ss.topic_id = t.id
-      JOIN subjects s ON t.subject_id = s.id
-      WHERE ss.user_id = ${req.userId!}
-        AND ss.created_at > NOW() - INTERVAL '7 days'
+      JOIN topics t ON ss."topicId" = t.id
+      JOIN subjects s ON t."subjectId" = s.id
+      WHERE ss."userId" = ${req.userId!}
+        AND ss."createdAt" > NOW() - INTERVAL '7 days'
       GROUP BY s.name
     `,
   ]);
@@ -86,7 +89,7 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
     avgScore: avgScore._avg.score ? Math.round(avgScore._avg.score * 100) : null,
     bySubjectLast7Days: bySubject,
   });
-});
+}));
 
 // ─── Spaced repetition (SM-2 simplified) ─────────────────────────────────────
 
