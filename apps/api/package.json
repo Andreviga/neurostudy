@@ -10,7 +10,8 @@
     "db:push": "prisma db push",
     "db:seed": "ts-node src/seed.ts",
     "db:studio": "prisma studio",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.0",
@@ -40,6 +41,7 @@
     "typescript": "^5.5.3",
     "uuid": "^10.0.0",
     "winston": "^3.13.0",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "next": "14.2.5"
   }
 }

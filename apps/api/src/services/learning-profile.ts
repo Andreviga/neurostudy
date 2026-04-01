@@ -62,7 +62,7 @@ export async function updateLearningProfile(userId: string, session: StudySessio
     take: 3,
   });
   const avgRecentScore =
-    recentSessions.reduce((sum: number, s) => sum + (s.score ?? s.completionRate), 0) / recentSessions.length;
+    recentSessions.reduce((sum: number, s: { score: number | null; completionRate: number }) => sum + (s.score ?? s.completionRate), 0) / recentSessions.length;
 
   let weakTopics = profile.weakTopics;
   if (avgRecentScore < 0.5 && !weakTopics.includes(session.topicId)) {

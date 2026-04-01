@@ -128,7 +128,18 @@ export default function ProgressPage() {
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Próximo formato recomendado</span>
                 <span className="font-medium text-brand-600">
-                  {{ QUIZ: 'Quiz', FLASHCARD: 'Flashcard', SUMMARY_SHORT: 'Resumo rápido', SUMMARY_MEDIUM: 'Resumo médio' }[profile.recommendedFormat] || profile.recommendedFormat}
+                  {({
+                    QUIZ: 'Quiz',
+                    FLASHCARD: 'Flashcard',
+                    SUMMARY_SHORT: 'Resumo rápido',
+                    SUMMARY_MEDIUM: 'Resumo médio',
+                    STEP_BY_STEP: 'Passo a passo',
+                    ANALOGY: 'Analogia',
+                    PRACTICAL_EXAMPLE: 'Exemplo prático',
+                    SUMMARY_DETAILED: 'Resumo detalhado',
+                    GUIDED_QUESTIONS: 'Perguntas guiadas',
+                    MIND_MAP: 'Mapa mental',
+                  } as const)[profile.recommendedFormat] || profile.recommendedFormat}
                 </span>
               </div>
             </div>

@@ -2,6 +2,8 @@ services:
   - type: web
     name: neurostudy-api
     runtime: node
+    branch: codex/diagnose-build-error-in-vercel
+    autoDeploy: true
     rootDir: apps/api
     buildCommand: npm install && npx prisma generate && npm run build
     startCommand: npx prisma migrate deploy && node dist/index.js
@@ -12,9 +14,9 @@ services:
       - key: PORT
         value: 3001
       - key: DATABASE_URL
-        sync: false          # você vai colar a URL do Neon
+        sync: false
       - key: JWT_SECRET
-        generateValue: true  # Render gera automaticamente
+        generateValue: true
       - key: DEFAULT_AI_PROVIDER
         value: openai
       - key: OPENAI_API_KEY
@@ -26,6 +28,21 @@ services:
       - key: STORAGE_PROVIDER
         value: local
       - key: LOCAL_UPLOAD_DIR
-        value: ./uploads
+        value: /tmp/uploads
       - key: WEB_URL
-        sync: false          # você vai colar a URL do Vercel depois
+        sync: false
+
+  - type: web
+    name: neurostudy-web
+    runtime: node
+    branch: codex/diagnose-build-error-in-vercel
+    autoDeploy: true
+    rootDir: apps/web
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        sync: false

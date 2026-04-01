@@ -18,10 +18,17 @@ import profileRouter from './routes/profile';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const isVercel = process.env.VERCEL === '1';
 
 // ─── Ensure upload dir exists ────────────────────────────────────────────────
-const uploadDir = process.env.LOCAL_UPLOAD_DIR || './uploads';
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+const uploadDir = process.env.LOCAL_UPLOAD_DIR || (isVercel ? '/tmp/uploads' : './uploads');
+if (!fs.existsSync(uploadDir)) {
+  try {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  } catch (error) {
+    logger.warn('Could not create upload directory', { uploadDir, error: (error as Error).message });
+  }
+}
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(helmet());
@@ -45,6 +52,34 @@ app.use('/api/sessions', sessionsRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/profile', profileRouter);
 
+// Root route
+app.get('/', (req, res) => {
+  const webUrl = process.env.WEB_URL;
+  if (webUrl) {
+    res.redirect(webUrl);
+    return;
+  }
+
+  const host = req.get('host');
+  if (host?.includes('neurostudy-api')) {
+    const inferredWebUrl = `https://${host.replace('neurostudy-api', 'neurostudy-web')}`;
+    res.redirect(inferredWebUrl);
+    return;
+  }
+
+  const renderExternalUrl = process.env.RENDER_EXTERNAL_URL;
+  if (renderExternalUrl?.includes('-api')) {
+    res.redirect(renderExternalUrl.replace('-api', '-web'));
+    return;
+  }
+
+  res.status(200).json({
+    service: 'neurostudy-api',
+    status: 'ok',
+    detail: 'Configure WEB_URL com a URL pública do frontend no Render para habilitar redirecionamento.',
+  });
+});
+
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
@@ -54,8 +89,10 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.listen(PORT, () => {
-  logger.info(`API running on http://localhost:${PORT}`);
-});
+if (!isVercel) {
+  app.listen(PORT, () => {
+    logger.info(`API running on http://localhost:${PORT}`);
+  });
+}
 
 export default app;

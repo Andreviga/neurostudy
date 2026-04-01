@@ -27,6 +27,19 @@ Upload de materiais → extração de tópicos → resumos, quizzes e flashcards
 
 ---
 
+## Troubleshooting de Deploy (Render)
+
+Se a tela **Choose Commit to Deploy** no Render só mostrar commits antigos (ex.: `6a1fab2`), isso significa que o Render está lendo apenas o que já foi **enviado ao GitHub remoto**.
+
+Checklist rápido:
+- Faça `git push` da branch que contém os commits novos.
+- No Render, confirme que o serviço está apontando para a mesma branch.
+- Clique em **Manual Deploy > Deploy latest commit** depois do push.
+- Se usar Blueprint (`render.yaml`), faça **Sync Blueprint** para aplicar mudanças de serviço/env.
+- Defina `WEB_URL` no serviço da API com a URL pública do frontend no Render (ex.: `https://<seu-web>.onrender.com`).
+
+> Sem push para o remoto, o Render não consegue listar commits locais.
+
 ## Configuração rápida
 
 ### 1. Clone e instale dependências
