@@ -98,6 +98,8 @@ export interface StudySession {
   durationSecs: number;
   completionRate: number;
   score?: number;
+  aiProvider?: string;
+  aiModel?: string;
   createdAt: string;
   topic?: { title: string; subject?: { name: string } };
 }
