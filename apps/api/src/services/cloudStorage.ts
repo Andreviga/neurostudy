@@ -83,7 +83,7 @@ export async function exchangeGoogleCode(code: string): Promise<{
     }),
   });
   if (!resp.ok) throw new Error(`Google token exchange failed: ${await resp.text()}`);
-  return resp.json();
+  return resp.json() as Promise<{ access_token: string; refresh_token?: string; expires_in: number }>;
 }
 
 async function refreshGoogleToken(refreshToken: string): Promise<{ access_token: string; expires_in: number }> {
@@ -98,7 +98,7 @@ async function refreshGoogleToken(refreshToken: string): Promise<{ access_token:
     }),
   });
   if (!resp.ok) throw new Error(`Google token refresh failed: ${await resp.text()}`);
-  return resp.json();
+  return resp.json() as Promise<{ access_token: string; expires_in: number }>;
 }
 
 async function getValidGoogleToken(userId: string): Promise<string> {
@@ -135,7 +135,7 @@ async function getOrCreateGoogleFolder(accessToken: string, existingFolderId?: s
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     if (check.ok) {
-      const data = await check.json();
+      const data = await check.json() as any;
       if (!data.trashed) return existingFolderId;
     }
   }
@@ -145,7 +145,7 @@ async function getOrCreateGoogleFolder(accessToken: string, existingFolderId?: s
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent("name='NeuroStudy' and mimeType='application/vnd.google-apps.folder' and trashed=false")}&fields=files(id)`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
-  const searchData = await search.json();
+  const searchData = await search.json() as any;
   if (searchData.files?.length > 0) return searchData.files[0].id;
 
   // Create folder
@@ -154,7 +154,7 @@ async function getOrCreateGoogleFolder(accessToken: string, existingFolderId?: s
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: 'NeuroStudy', mimeType: 'application/vnd.google-apps.folder' }),
   });
-  const folder = await create.json();
+  const folder = await create.json() as any;
   return folder.id as string;
 }
 
@@ -206,7 +206,7 @@ export async function uploadToGoogleDrive(
     throw new Error(`Google Drive upload failed: ${err}`);
   }
 
-  const uploaded = await uploadResp.json();
+  const uploaded = await uploadResp.json() as any;
   const fileId = uploaded.id as string;
 
   // Make file readable by anyone with link (so web view works)
@@ -267,7 +267,7 @@ export async function exchangeOneDriveCode(code: string): Promise<{
     }),
   });
   if (!resp.ok) throw new Error(`OneDrive token exchange failed: ${await resp.text()}`);
-  return resp.json();
+  return resp.json() as Promise<{ access_token: string; refresh_token?: string; expires_in: number }>;
 }
 
 async function refreshOneDriveToken(refreshToken: string): Promise<{ access_token: string; expires_in: number }> {
@@ -282,7 +282,7 @@ async function refreshOneDriveToken(refreshToken: string): Promise<{ access_toke
     }),
   });
   if (!resp.ok) throw new Error(`OneDrive token refresh failed: ${await resp.text()}`);
-  return resp.json();
+  return resp.json() as Promise<{ access_token: string; expires_in: number }>;
 }
 
 async function getValidOneDriveToken(userId: string): Promise<string> {
@@ -335,7 +335,7 @@ export async function uploadToOneDrive(
     throw new Error(`OneDrive upload failed: ${err}`);
   }
 
-  const uploaded = await uploadResp.json();
+  const uploaded = await uploadResp.json() as any;
   const fileId = uploaded.id as string;
 
   // Create sharing link
@@ -350,7 +350,7 @@ export async function uploadToOneDrive(
 
   let fileUrl = uploaded.webUrl as string;
   if (shareResp.ok) {
-    const shareData = await shareResp.json();
+    const shareData = await shareResp.json() as any;
     fileUrl = shareData.link?.webUrl || fileUrl;
   }
 
