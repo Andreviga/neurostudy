@@ -115,3 +115,19 @@ export const profileApi = {
   get: () => request<import('@/types').LearningProfile>('/api/profile'),
   today: () => request<import('@/types').TodayPlan>('/api/profile/today'),
 };
+
+// ─── Cloud Storage ────────────────────────────────────────────────────────────
+export type CloudProvider = 'GOOGLE_DRIVE' | 'ONE_DRIVE';
+export interface CloudConnection { provider: CloudProvider; createdAt: string }
+
+export const cloudApi = {
+  /** List connected cloud providers */
+  status: () => request<CloudConnection[]>('/api/cloud/status'),
+  /** Get the OAuth URL to connect a provider (redirect user to it) */
+  getAuthUrl: (provider: 'google' | 'onedrive') =>
+    request<{ authUrl: string }>(`/api/cloud/auth/${provider}`),
+  /** Disconnect a provider */
+  disconnect: (provider: 'google' | 'onedrive') =>
+    request<void>(`/api/cloud/disconnect/${provider}`, { method: 'DELETE' }),
+};
+

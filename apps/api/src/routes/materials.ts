@@ -10,6 +10,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { extractTextFromPDF } from '../services/pdf';
 import { generateTopicsFromText, detectSubjectFromText } from '../services/ai';
 import { uploadFile } from '../services/storage';
+import { getUserCloudProvider, uploadToCloud, downloadFromCloud } from '../services/cloudStorage';
 import { logger } from '../lib/logger';
 import { asyncHandler } from '../lib/async-handler';
 import { truncateExtractedText, estimateTokenCount } from '../utils/textUtils';
@@ -80,7 +81,25 @@ router.post('/upload', upload.single('file'), asyncHandler(async (req: AuthReque
 
   const ext = path.extname(req.file.originalname).toLowerCase();
   const type = extToType(ext);
-  const fileUrl = await uploadFile(req.file.path, req.file.filename);
+  const mimeType = req.file.mimetype || 'application/octet-stream';
+
+  // Try cloud storage first; fall back to local/S3
+  const cloudProvider = await getUserCloudProvider(req.userId!);
+  let fileUrl: string;
+  let cloudFileId: string | undefined;
+
+  if (cloudProvider) {
+    try {
+      const result = await uploadToCloud(req.userId!, cloudProvider, req.file.path, req.file.filename, mimeType);
+      fileUrl = result.fileUrl;
+      cloudFileId = result.fileId;
+    } catch (cloudErr) {
+      logger.warn('Cloud upload failed, falling back to own storage', { err: String(cloudErr) });
+      fileUrl = await uploadFile(req.file.path, req.file.filename);
+    }
+  } else {
+    fileUrl = await uploadFile(req.file.path, req.file.filename);
+  }
 
   // Create material record immediately
   const material = await prisma.material.create({
@@ -90,11 +109,12 @@ router.post('/upload', upload.single('file'), asyncHandler(async (req: AuthReque
       title: title || req.file.originalname,
       type,
       fileUrl,
+      ...(cloudProvider && cloudFileId ? { cloudProvider, cloudFileId } : {}),
     },
   });
 
   // Process async (don't block response)
-  processMaterial(material.id, req.file.path, type, req.userId!).catch((err) =>
+  processMaterial(material.id, req.file.path, type, req.userId!, cloudProvider ?? undefined, cloudFileId).catch((err) =>
     logger.error('Material processing failed', { materialId: material.id, err: err.message })
   );
 
@@ -284,10 +304,33 @@ router.delete('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async function processMaterial(materialId: string, filePath: string, type: string, userId: string) {
+async function processMaterial(
+  materialId: string,
+  filePath: string,
+  type: string,
+  userId: string,
+  cloudProvider?: 'GOOGLE_DRIVE' | 'ONE_DRIVE',
+  cloudFileId?: string
+) {
+  // If the file was uploaded to cloud storage but multer still saved it locally,
+  // we already have the local copy — no need to re-download.
+  // However, if in the future we support processing without the local copy
+  // (e.g. after a restart), this block would download from cloud.
+  const localFileAvailable = fs.existsSync(filePath);
+  let tempDownloaded = false;
+
+  if (!localFileAvailable && cloudProvider && cloudFileId && (type === 'PDF' || type === 'TXT')) {
+    try {
+      await downloadFromCloud(userId, cloudProvider, cloudFileId, filePath);
+      tempDownloaded = true;
+    } catch (err) {
+      logger.warn('Could not download from cloud for processing', { materialId, err: String(err) });
+    }
+  }
+
   let rawText = '';
 
-  if (type === 'PDF') {
+  if ((type === 'PDF') && fs.existsSync(filePath)) {
     const result = await extractTextFromPDF(filePath);
     rawText = result.text;
     const { text, truncated } = truncateExtractedText(rawText);
@@ -304,7 +347,7 @@ async function processMaterial(materialId: string, filePath: string, type: strin
     rawText = text;
   }
 
-  if (type === 'TXT') {
+  if (type === 'TXT' && fs.existsSync(filePath)) {
     rawText = fs.readFileSync(filePath, 'utf-8').trim();
     const { text, truncated } = truncateExtractedText(rawText);
     await prisma.material.update({
@@ -326,8 +369,8 @@ async function processMaterial(materialId: string, filePath: string, type: strin
     });
   }
 
-  // Clean up local file after processing if using S3 (uploaded file no longer needed)
-  if (process.env.STORAGE_PROVIDER === 's3') {
+  // Clean up local file after processing when using S3 or cloud storage
+  if (process.env.STORAGE_PROVIDER === 's3' || cloudProvider || tempDownloaded) {
     fs.unlink(filePath, () => {});
   }
 

@@ -3,9 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, FileText, CheckCircle2, AlertCircle, X, Loader2, Film, Image as ImageIcon, Globe, Wand2 } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, AlertCircle, X, Loader2, Film, Image as ImageIcon, Globe, Wand2, Cloud } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { subjectsApi, materialsApi } from '@/lib/api';
+import { subjectsApi, materialsApi, cloudApi } from '@/lib/api';
+import type { CloudConnection } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { Subject } from '@/types';
 
@@ -38,10 +39,12 @@ export default function UploadPage() {
   const [urlForm, setUrlForm] = useState({ url: '', title: '' });
   const [urlLoading, setUrlLoading] = useState(false);
   const [fileSnippet, setFileSnippet] = useState('');
+  const [cloudConnections, setCloudConnections] = useState<CloudConnection[]>([]);
   const pollersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
 
   useEffect(() => {
     subjectsApi.list().then((list) => setSubjects(list));
+    cloudApi.status().then(setCloudConnections).catch(() => {});
     return () => {
       pollersRef.current.forEach((id) => clearInterval(id));
     };
@@ -185,6 +188,20 @@ export default function UploadPage() {
         <h1 className="text-2xl font-bold text-slate-900">Upload de material</h1>
         <p className="text-slate-500 text-sm mt-0.5">Envie arquivos, cole texto ou importe uma URL — a IA extrai os tópicos automaticamente</p>
       </div>
+
+      {/* Cloud storage banner */}
+      {cloudConnections.length > 0 && (
+        <div className="flex items-start gap-3 rounded-xl bg-brand-50 border border-brand-200 px-4 py-3 text-sm">
+          <Cloud className="w-4 h-4 text-brand-600 mt-0.5 flex-shrink-0" />
+          <p className="text-brand-700">
+            <strong>Nuvem ativa:</strong> os arquivos serão salvos no{' '}
+            {cloudConnections.map((c) => (
+              c.provider === 'GOOGLE_DRIVE' ? 'Google Drive' : 'OneDrive'
+            )).join(' e ')} — sem gastar armazenamento do servidor.{' '}
+            <a href="/settings" className="underline hover:text-brand-900">Gerenciar</a>
+          </p>
+        </div>
+      )}
 
       {/* Subject selector */}
       <div>
