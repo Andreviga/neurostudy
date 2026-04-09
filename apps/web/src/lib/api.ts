@@ -76,6 +76,10 @@ export const materialsApi = {
       '/api/materials/detect-subject',
       { method: 'POST', body: JSON.stringify({ text }) }
     ),
+  getStatus: (id: string) =>
+    request<{ id: string; status: 'done' | 'processing'; title: string; truncated: boolean; subjectId: string }>(
+      `/api/materials/${id}/status`
+    ),
   get: (id: string) => request<import('@/types').Material>(`/api/materials/${id}`),
 };
 

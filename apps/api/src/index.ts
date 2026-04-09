@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import path from 'path';
 import fs from 'fs';
 import { logger } from './lib/logger';
+import { startKeepAlive } from './keepAlive';
 
 // ─── Validate required environment variables at startup ───────────────────────
 const REQUIRED_ENV = ['DATABASE_URL', 'JWT_SECRET'];
@@ -23,6 +24,8 @@ import topicsRouter from './routes/topics';
 import sessionsRouter from './routes/sessions';
 import reviewsRouter from './routes/reviews';
 import profileRouter from './routes/profile';
+import pushRouter from './routes/push';
+import shareRouter from './routes/share';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -42,7 +45,13 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.resolve(uploadDir)));
 
 // Rate limiting
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  message: { error: 'Muitos uploads. Tente novamente em 1 hora.' },
+});
 app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: 'Too many requests' }));
+app.use('/api/materials/upload', uploadLimiter);
 app.use('/api', rateLimit({ windowMs: 60 * 1000, max: 200, message: 'Too many requests' }));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -53,6 +62,8 @@ app.use('/api/topics', topicsRouter);
 app.use('/api/sessions', sessionsRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/profile', profileRouter);
+app.use('/api/push', pushRouter);
+app.use('/api/share', shareRouter);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
@@ -65,6 +76,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 
 app.listen(PORT, () => {
   logger.info(`API running on http://localhost:${PORT}`);
+  startKeepAlive();
 });
 
 export default app;

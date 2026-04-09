@@ -29,3 +29,9 @@ services:
         value: ./uploads
       - key: WEB_URL
         sync: false          # você vai colar a URL do Vercel depois
+      - key: API_URL
+        value: https://neurostudy-api.onrender.com  # substituir pela URL real da API
+      - key: VAPID_PUBLIC_KEY
+        sync: false          # gerado por: npx web-push generate-vapid-keys
+      - key: VAPID_PRIVATE_KEY
+        sync: false          # gerado por: npx web-push generate-vapid-keys

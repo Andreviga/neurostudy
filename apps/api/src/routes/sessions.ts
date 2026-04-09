@@ -4,6 +4,8 @@ import { prisma } from '../lib/prisma';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { updateLearningProfile } from '../services/learning-profile';
 import { asyncHandler } from '../lib/async-handler';
+import { updateReviewWithFSRS } from '../services/fsrsService';
+import { awardXp } from '../services/gamificationService';
 
 const router = Router();
 router.use(authenticate);
@@ -36,13 +38,16 @@ router.post('/', asyncHandler(async (req: AuthRequest, res: Response) => {
     data: { ...parsed.data, userId: req.userId! },
   });
 
-  // Update spaced repetition review schedule
-  await updateReviewSchedule(req.userId!, parsed.data.topicId, parsed.data.score);
+  // Update spaced repetition via FSRS (with SM-2 fallback for new reviews)
+  await updateReviewScheduleFSRS(req.userId!, parsed.data.topicId, parsed.data.score);
+
+  // Award XP + badges (gamification)
+  const { newBadges } = await awardXp(req.userId!, 'SESSION_COMPLETED', parsed.data.score).catch(() => ({ newBadges: [] }));
 
   // Update learning profile asynchronously
   updateLearningProfile(req.userId!, session).catch(() => {});
 
-  res.status(201).json(session);
+  res.status(201).json({ ...session, newBadges });
 }));
 
 // GET /api/sessions — history
@@ -69,9 +74,6 @@ router.get('/stats', asyncHandler(async (req: AuthRequest, res: Response) => {
       where: { userId: req.userId!, score: { not: null } },
       _avg: { score: true },
     }),
-    // Sessions per subject last 7 days
-    // NOTE: Prisma maps fields to their exact camelCase names in PostgreSQL
-    // so column names must be quoted (e.g. "userId", "createdAt")
     prisma.$queryRaw`
       SELECT s.name as subject, COUNT(ss.id)::int as sessions
       FROM study_sessions ss
@@ -91,14 +93,15 @@ router.get('/stats', asyncHandler(async (req: AuthRequest, res: Response) => {
   });
 }));
 
-// ─── Spaced repetition (SM-2 simplified) ─────────────────────────────────────
+// ─── Spaced repetition hybrid: FSRS for existing reviews, SM-2 seed for new ──
 
-async function updateReviewSchedule(userId: string, topicId: string, score?: number) {
-  const q = score !== undefined ? score : 0.5; // 0-1
+async function updateReviewScheduleFSRS(userId: string, topicId: string, score?: number) {
+  const q = score !== undefined ? score : 0.5;
 
   const existing = await prisma.review.findUnique({ where: { userId_topicId: { userId, topicId } } });
 
   if (!existing) {
+    // First encounter — seed with SM-2 values, FSRS will take over next time
     await prisma.review.create({
       data: {
         userId,
@@ -112,24 +115,9 @@ async function updateReviewSchedule(userId: string, topicId: string, score?: num
     return;
   }
 
-  // SM-2 ease factor update
-  const newEase = Math.max(1.3, existing.easeFactor + 0.1 - (1 - q) * (0.08 + (1 - q) * 0.02));
-  const newInterval = q < 0.6
-    ? 1
-    : existing.reviewCount === 1
-      ? 6
-      : Math.round(existing.interval * newEase);
-
-  await prisma.review.update({
-    where: { userId_topicId: { userId, topicId } },
-    data: {
-      easeFactor: newEase,
-      interval: newInterval,
-      retentionScore: q,
-      reviewCount: { increment: 1 },
-      nextReviewDate: new Date(Date.now() + newInterval * 86400000),
-    },
-  });
+  // Use FSRS for subsequent reviews
+  await updateReviewWithFSRS(existing.id, q);
 }
 
 export default router;
+

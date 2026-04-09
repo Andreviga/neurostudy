@@ -12,11 +12,40 @@ import { generateTopicsFromText, detectSubjectFromText } from '../services/ai';
 import { uploadFile } from '../services/storage';
 import { logger } from '../lib/logger';
 import { asyncHandler } from '../lib/async-handler';
+import { truncateExtractedText, estimateTokenCount } from '../utils/textUtils';
 
 const router = Router();
 router.use(authenticate);
 
-// Multer config
+// ─── Allowed MIME types for magic-byte validation ─────────────────────────────
+const ALLOWED_MIMES = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
+]);
+
+async function validateMagicBytes(filePath: string): Promise<boolean> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { fileTypeFromFile } = await (Function('return import("file-type")')() as Promise<any>);
+    const result = await fileTypeFromFile(filePath);
+    if (!result) return true; // text files have no magic bytes — allow
+    return ALLOWED_MIMES.has(result.mime);
+  } catch {
+    return true; // if file-type is unavailable, skip validation
+  }
+}
+
+// Multer config — limit to 50 MB
 const storage = multer.diskStorage({
   destination: process.env.LOCAL_UPLOAD_DIR || './uploads',
   filename: (_req: Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) =>
@@ -24,7 +53,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
   storage,
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
   fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
     const allowed = ['.pdf', '.docx', '.pptx', '.txt', '.md', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.mp4', '.mov', '.webm', '.avi', '.mkv'];
     const ext = path.extname(file.originalname).toLowerCase();
@@ -37,6 +66,14 @@ router.post('/upload', upload.single('file'), asyncHandler(async (req: AuthReque
   if (!req.file) { res.status(400).json({ error: 'No file uploaded' }); return; }
   const { subjectId, title } = req.body;
   if (!subjectId) { res.status(400).json({ error: 'subjectId is required' }); return; }
+
+  // Magic-byte validation (security Fase 1.4)
+  const isValidType = await validateMagicBytes(req.file.path);
+  if (!isValidType) {
+    fs.unlink(req.file.path, () => {});
+    res.status(400).json({ error: 'Tipo de arquivo não suportado ou arquivo corrompido.' });
+    return;
+  }
 
   const subject = await prisma.subject.findFirst({ where: { id: subjectId, userId: req.userId! } });
   if (!subject) { res.status(404).json({ error: 'Subject not found' }); return; }
@@ -107,35 +144,69 @@ router.post('/url', asyncHandler(async (req: AuthRequest, res: Response) => {
   const subject = await prisma.subject.findFirst({ where: { id: subjectId, userId: req.userId! } });
   if (!subject) { res.status(404).json({ error: 'Subject not found' }); return; }
 
-  let html: string;
-  try {
-    const resp = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NeuroStudyBot/1.0)' },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    html = await resp.text();
-  } catch (err: unknown) {
-    res.status(422).json({ error: `Could not fetch URL: ${err instanceof Error ? err.message : 'Unknown error'}` });
+  let extractedText = '';
+  let materialType: MaterialType = 'LINK';
+  let materialTitle = title || url;
+
+  // ─── YouTube transcript ────────────────────────────────────────────────────
+  const youtubeId = extractYoutubeId(url);
+  if (youtubeId) {
+    try {
+      const { YoutubeTranscript } = await import('youtube-transcript');
+      let transcript: { text: string }[] = [];
+      try {
+        transcript = await YoutubeTranscript.fetchTranscript(youtubeId, { lang: 'pt' });
+      } catch {
+        transcript = await YoutubeTranscript.fetchTranscript(youtubeId);
+      }
+      extractedText = transcript.map((t) => t.text).join(' ').trim();
+      materialType = 'VIDEO';
+      if (!title) materialTitle = `YouTube: ${youtubeId}`;
+    } catch (err) {
+      logger.warn('YouTube transcript fetch failed', { youtubeId, err: String(err) });
+    }
+  }
+
+  // ─── Fallback: fetch HTML ─────────────────────────────────────────────────
+  if (!extractedText) {
+    let html: string;
+    try {
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NeuroStudyBot/1.0)' },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      html = await resp.text();
+    } catch (err: unknown) {
+      res.status(422).json({ error: `Could not fetch URL: ${err instanceof Error ? err.message : 'Unknown error'}` });
+      return;
+    }
+    extractedText = extractTextFromHtml(html);
+    if (!title) materialTitle = extractPageTitle(html) || url;
+  }
+
+  if (extractedText.length < 100) {
+    res.status(422).json({ error: 'Not enough text content found on this page' });
     return;
   }
 
-  const text = extractTextFromHtml(html);
-  if (text.length < 100) { res.status(422).json({ error: 'Not enough text content found on this page' }); return; }
+  const { text: truncated, truncated: wasTruncated } = truncateExtractedText(extractedText);
 
   const material = await prisma.material.create({
     data: {
       userId: req.userId!,
       subjectId,
-      title: title || extractPageTitle(html) || url,
-      type: 'LINK',
+      title: materialTitle,
+      type: materialType,
       fileUrl: url,
-      extractedText: text,
+      extractedText: truncated,
+      textTruncated: wasTruncated,
+      textTokenCount: estimateTokenCount(truncated),
       processedAt: new Date(),
     },
   });
 
-  generateTopicsFromText(material.id, text, subjectId, req.userId!).catch((err) =>
+  generateTopicsFromText(material.id, truncated, subjectId, req.userId!).catch((err) =>
     logger.error('Topic generation failed', { materialId: material.id, err: err.message })
   );
 
@@ -177,6 +248,22 @@ router.post('/detect-subject', asyncHandler(async (req: AuthRequest, res: Respon
   res.json({ subjectId, subjectName: detection.subjectName, confidence: detection.confidence, reason: detection.reason, isNew: !matched });
 }));
 
+// GET /api/materials/:id/status — lightweight polling for processing state
+router.get('/:id/status', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const material = await prisma.material.findFirst({
+    where: { id: req.params.id, userId: req.userId! },
+    select: { id: true, processedAt: true, title: true, textTruncated: true, subjectId: true },
+  });
+  if (!material) { res.status(404).json({ error: 'Material not found' }); return; }
+  res.json({
+    id: material.id,
+    status: material.processedAt ? 'done' : 'processing',
+    title: material.title,
+    truncated: material.textTruncated,
+    subjectId: material.subjectId,
+  });
+}));
+
 // GET /api/materials/:id
 router.get('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
   const material = await prisma.material.findFirst({
@@ -198,23 +285,38 @@ router.delete('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function processMaterial(materialId: string, filePath: string, type: string, userId: string) {
-  let text = '';
+  let rawText = '';
 
   if (type === 'PDF') {
     const result = await extractTextFromPDF(filePath);
-    text = result.text;
+    rawText = result.text;
+    const { text, truncated } = truncateExtractedText(rawText);
     await prisma.material.update({
       where: { id: materialId },
-      data: { extractedText: text, pageCount: result.pages, processedAt: new Date() },
+      data: {
+        extractedText: text,
+        textTruncated: truncated,
+        textTokenCount: estimateTokenCount(text),
+        pageCount: result.pages,
+        processedAt: new Date(),
+      },
     });
+    rawText = text;
   }
 
   if (type === 'TXT') {
-    text = fs.readFileSync(filePath, 'utf-8').trim();
+    rawText = fs.readFileSync(filePath, 'utf-8').trim();
+    const { text, truncated } = truncateExtractedText(rawText);
     await prisma.material.update({
       where: { id: materialId },
-      data: { extractedText: text, processedAt: new Date() },
+      data: {
+        extractedText: text,
+        textTruncated: truncated,
+        textTokenCount: estimateTokenCount(text),
+        processedAt: new Date(),
+      },
     });
+    rawText = text;
   }
 
   if (type === 'IMAGE' || type === 'VIDEO') {
@@ -229,14 +331,26 @@ async function processMaterial(materialId: string, filePath: string, type: strin
     fs.unlink(filePath, () => {});
   }
 
-  if (text.length > 100) {
+  if (rawText.length > 100) {
     const material = await prisma.material.findUnique({ where: { id: materialId } });
-    if (material) await generateTopicsFromText(materialId, text, material.subjectId, userId);
+    if (material) await generateTopicsFromText(materialId, rawText, material.subjectId, userId);
   }
 }
 
-function extractTextFromHtml(html: string): string {
-  return html
+function extractYoutubeId(url: string): string | null {
+  const patterns = [
+    /youtube\.com\/watch\?v=([^&]+)/,
+    /youtu\.be\/([^?]+)/,
+    /youtube\.com\/embed\/([^?]+)/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+function extractTextFromHtml(html: string): string {  return html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<[^>]+>/g, ' ')

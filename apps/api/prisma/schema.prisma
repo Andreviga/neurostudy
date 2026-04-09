@@ -20,6 +20,8 @@ model User {
   course    String?
   semester  Int?
   dailyGoalMinutes Int @default(30)
+  pushSubscription String? @db.Text // JSON do PushSubscription
+  pushEnabled      Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -28,6 +30,7 @@ model User {
   studySessions   StudySession[]
   learningProfile LearningProfile?
   reviews         Review[]
+  refreshTokens   RefreshToken[]
 
   @@map("users")
 }
@@ -42,6 +45,9 @@ model Subject {
   color       String        @default("#6366f1") // UI color tag
   priority    Priority      @default(MEDIUM)
   status      SubjectStatus @default(ACTIVE)
+  examStyle   String?       // ex: "múltipla escolha 5 alternativas"
+  examDuration Int?         // duração típica em minutos
+  professorName String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -49,6 +55,8 @@ model Subject {
   materials Material[]
   topics    Topic[]
 
+  @@index([userId, status])
+  @@index([userId, priority])
   @@map("subjects")
 }
 
@@ -75,6 +83,8 @@ model Material {
   type          MaterialType
   fileUrl       String?
   extractedText String?      @db.Text
+  textTruncated Boolean      @default(false)
+  textTokenCount Int?
   pageCount     Int?
   processedAt   DateTime?
   createdAt     DateTime     @default(now())
@@ -83,6 +93,8 @@ model Material {
   subject Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   topics  Topic[]
 
+  @@index([subjectId, processedAt])
+  @@index([userId, createdAt])
   @@map("materials")
 }
 
@@ -109,6 +121,8 @@ model Topic {
   difficulty         Difficulty @default(MEDIUM)
   prerequisiteTopics String[]   // array of topic IDs
   order              Int        @default(0)
+  isPublic           Boolean    @default(false)
+  shareToken         String?    @unique @default(cuid())
   createdAt          DateTime   @default(now())
 
   material      Material?      @relation(fields: [materialId], references: [id], onDelete: SetNull)
@@ -118,6 +132,8 @@ model Topic {
   quizItems     QuizItem[]
   flashcards    Flashcard[]
 
+  @@index([subjectId, difficulty])
+  @@index([subjectId, order])
   @@map("topics")
 }
 
@@ -168,11 +184,14 @@ model StudySession {
   score          Float?        // 0-1 (quiz score)
   aiProvider     String?       // openai | anthropic | gemini
   aiModel        String?
+  cachedContent  String?       @db.Text // JSON cache of generated content
   createdAt      DateTime      @default(now())
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
+  @@index([userId, createdAt])
+  @@index([topicId, format])
   @@map("study_sessions")
 }
 
@@ -200,6 +219,16 @@ model Review {
   reviewCount    Int      @default(0)
   easeFactor     Float    @default(2.5) // SM-2 algorithm
   interval       Int      @default(1)   // days until next review
+  // FSRS v5 fields
+  fsrsStability      Float?
+  fsrsRetrievability Float?
+  fsrsDifficulty     Float?
+  fsrsState          Int    @default(0) // 0=New,1=Learning,2=Review,3=Relearning
+  fsrsReps           Int    @default(0)
+  fsrsLapses         Int    @default(0)
+  scheduledDays      Int    @default(0)
+  elapsedDays        Int    @default(0)
+  lastReview         DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -207,6 +236,8 @@ model Review {
   topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
   @@unique([userId, topicId])
+  @@index([userId, nextReviewDate])
+  @@index([topicId])
   @@map("reviews")
 }
 
@@ -229,9 +260,31 @@ model LearningProfile {
   totalMinsStudied  Int      @default(0)
   streakDays        Int      @default(0)
   lastStudiedAt     DateTime?
+  // Gamification
+  totalXp           Int      @default(0)
+  currentLevel      Int      @default(1)
+  badges            String[] // badge IDs conquistados
+  lastActivityAt    DateTime?
   updatedAt         DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("learning_profiles")
+}
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
 }

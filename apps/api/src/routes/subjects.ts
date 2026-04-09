@@ -12,6 +12,9 @@ const subjectSchema = z.object({
   description: z.string().optional(),
   color: z.string().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
+  examStyle: z.string().optional(),
+  examDuration: z.number().int().positive().optional(),
+  professorName: z.string().optional(),
 });
 
 // GET /api/subjects

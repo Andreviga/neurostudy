@@ -1,6 +1,7 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, FileText, CheckCircle2, AlertCircle, X, Loader2, Film, Image as ImageIcon, Globe, Wand2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -11,7 +12,9 @@ import type { Subject } from '@/types';
 interface UploadItem {
   id: string;
   file: File;
-  status: 'pending' | 'uploading' | 'success' | 'error';
+  status: 'pending' | 'uploading' | 'processing' | 'success' | 'error';
+  progress?: number;
+  materialId?: string;
   error?: string;
 }
 
@@ -25,6 +28,7 @@ function FileIcon({ file }: { file: File }) {
 const AUTO_DETECT = '__auto__';
 
 export default function UploadPage() {
+  const router = useRouter();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [selectedSubject, setSelectedSubject] = useState(AUTO_DETECT);
   const [queue, setQueue] = useState<UploadItem[]>([]);
@@ -33,16 +37,48 @@ export default function UploadPage() {
   const [textLoading, setTextLoading] = useState(false);
   const [urlForm, setUrlForm] = useState({ url: '', title: '' });
   const [urlLoading, setUrlLoading] = useState(false);
-  // Snippet for file tab when auto-detect is active
   const [fileSnippet, setFileSnippet] = useState('');
+  const pollersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
 
   useEffect(() => {
-    subjectsApi.list().then((list) => {
-      setSubjects(list);
-    });
+    subjectsApi.list().then((list) => setSubjects(list));
+    return () => {
+      pollersRef.current.forEach((id) => clearInterval(id));
+    };
   }, []);
 
-  /** Resolves which subjectId to use. Calls detect-subject if auto-detect is selected. */
+  function pollMaterialStatus(itemId: string, materialId: string) {
+    let step = 0;
+    const steps = [30, 60, 85];
+
+    const intervalId = setInterval(async () => {
+      if (step < steps.length) {
+        setQueue((prev) =>
+          prev.map((q) => q.id === itemId ? { ...q, progress: steps[step] } : q)
+        );
+        step++;
+      }
+      try {
+        const data = await materialsApi.getStatus(materialId);
+        if (data.status === 'done') {
+          clearInterval(intervalId);
+          pollersRef.current.delete(itemId);
+          setQueue((prev) =>
+            prev.map((q) => q.id === itemId ? { ...q, status: 'success', progress: 100 } : q)
+          );
+          if (data.truncated) {
+            toast('Texto truncado para caber no limite de armazenamento.', { icon: 'ℹ️' });
+          }
+          setTimeout(() => router.push(`/subjects/${data.subjectId}`), 1200);
+        }
+      } catch {
+        // keep polling — server may still be processing
+      }
+    }, 2000);
+
+    pollersRef.current.set(itemId, intervalId);
+  }
+
   async function resolveSubjectId(textForDetection: string): Promise<string> {
     if (selectedSubject !== AUTO_DETECT) return selectedSubject;
     if (textForDetection.trim().length < 50) {
@@ -54,7 +90,6 @@ export default function UploadPage() {
         ? `Nova disciplina detectada: "${result.subjectName}"`
         : `Disciplina identificada: "${result.subjectName}"`
     );
-    // Refresh subjects list
     setSubjects(await subjectsApi.list());
     return result.subjectId;
   }
@@ -93,16 +128,16 @@ export default function UploadPage() {
     }
 
     for (const item of pending) {
-      setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'uploading' } : q));
+      setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'uploading', progress: 10 } : q));
       try {
-        await materialsApi.upload(subjectId, item.file);
-        setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'success' } : q));
+        const material = await materialsApi.upload(subjectId, item.file);
+        setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'processing', progress: 20, materialId: material.id } : q));
+        pollMaterialStatus(item.id, material.id);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Erro no upload';
         setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'error', error: msg } : q));
       }
     }
-    toast.success('Upload concluído! Os tópicos serão gerados em instantes.');
   }
 
   async function submitText(e: React.FormEvent) {
@@ -332,20 +367,6 @@ export default function UploadPage() {
   );
 }
 
-
-interface UploadItem {
-  id: string;
-  file: File;
-  status: 'pending' | 'uploading' | 'success' | 'error';
-  error?: string;
-}
-
-function FileIcon({ file }: { file: File }) {
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-  if (['mp4', 'mov', 'webm', 'avi', 'mkv'].includes(ext)) return <Film className="w-4 h-4 text-brand-400 flex-shrink-0" />;
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) return <ImageIcon className="w-4 h-4 text-brand-400 flex-shrink-0" />;
-  return <FileText className="w-4 h-4 text-brand-400 flex-shrink-0" />;
-}
 
 export default function UploadPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);

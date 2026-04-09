@@ -4,6 +4,14 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { asyncHandler } from '../lib/async-handler';
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  refreshAccessToken,
+  revokeRefreshToken,
+  revokeAllRefreshTokens,
+} from '../services/authService';
+import { authenticate, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
@@ -20,7 +28,8 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
-function signToken(userId: string) {
+// Backward-compat: also sign a long-lived token for clients that only use `token`
+function signLegacyToken(userId: string) {
   return jwt.sign({ sub: userId }, process.env.JWT_SECRET!, {
     expiresIn: (process.env.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn']) || '7d',
   });
@@ -52,9 +61,16 @@ router.post('/signup', asyncHandler(async (req: Request, res: Response) => {
     data: { userId: user.id },
   });
 
-  const token = signToken(user.id);
+  const [accessToken, refreshToken, legacyToken] = await Promise.all([
+    Promise.resolve(generateAccessToken(user.id)),
+    generateRefreshToken(user.id),
+    Promise.resolve(signLegacyToken(user.id)),
+  ]);
+
   res.status(201).json({
-    token,
+    token: legacyToken,          // backward compat
+    accessToken,
+    refreshToken,
     user: { id: user.id, name: user.name, email: user.email, course: user.course },
   });
 }));
@@ -80,11 +96,39 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
-  const token = signToken(user.id);
+  const [accessToken, refreshToken, legacyToken] = await Promise.all([
+    Promise.resolve(generateAccessToken(user.id)),
+    generateRefreshToken(user.id),
+    Promise.resolve(signLegacyToken(user.id)),
+  ]);
+
   res.json({
-    token,
+    token: legacyToken,          // backward compat
+    accessToken,
+    refreshToken,
     user: { id: user.id, name: user.name, email: user.email, course: user.course },
   });
+}));
+
+// POST /api/auth/refresh
+router.post('/refresh', asyncHandler(async (req: Request, res: Response) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) { res.status(400).json({ error: 'refreshToken required' }); return; }
+  const tokens = await refreshAccessToken(refreshToken);
+  res.json(tokens);
+}));
+
+// POST /api/auth/logout — revoke current refresh token
+router.post('/logout', authenticate, asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { refreshToken } = req.body;
+  if (refreshToken) await revokeRefreshToken(refreshToken);
+  res.json({ success: true });
+}));
+
+// POST /api/auth/logout-all — revoke all sessions
+router.post('/logout-all', authenticate, asyncHandler(async (req: AuthRequest, res: Response) => {
+  await revokeAllRefreshTokens(req.userId!);
+  res.json({ success: true });
 }));
 
 // GET /api/auth/me
@@ -108,3 +152,4 @@ router.get('/me', async (req: Request, res: Response) => {
 });
 
 export default router;
+
