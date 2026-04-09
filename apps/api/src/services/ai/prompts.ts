@@ -53,6 +53,29 @@ Responda APENAS com JSON válido no seguinte formato:
   return `${formatInstructions[format]}\n\n${context}`;
 }
 
+export function buildSubjectDetectionPrompt(text: string, existingSubjects: string[]): string {
+  const list = existingSubjects.length > 0
+    ? `\nDisciplinas já cadastradas (use o nome exato se o conteúdo pertencer a uma delas):\n${existingSubjects.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
+    : '';
+
+  return `Você é um assistente acadêmico. Analise o trecho de material de estudo abaixo e determine a qual disciplina universitária ele pertence.${list}
+
+Responda APENAS com JSON válido no seguinte formato:
+{
+  "subjectName": "Nome da disciplina (ex: Cálculo II, Bioquímica, História Moderna)",
+  "confidence": "HIGH" | "MEDIUM" | "LOW",
+  "reason": "Breve justificativa (1 frase)"
+}
+
+Regras:
+- Se o conteúdo se encaixa numa das disciplinas já cadastradas, use o nome exato dela.
+- Caso contrário, proponha um nome claro e conciso em português.
+- Prefira nomes de disciplinas universitárias reconhecidos.
+
+TEXTO:
+${text.slice(0, 5000)}`;
+}
+
 export function buildTopicExtractionPrompt(text: string): string {
   return `Analise o texto acadêmico abaixo e extraia os tópicos principais de estudo.
 

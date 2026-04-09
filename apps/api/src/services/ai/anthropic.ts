@@ -51,6 +51,15 @@ export const anthropicService = {
       return [];
     }
   },
+
+  async rawCompletion(prompt: string): Promise<string> {
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 300,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    return response.content[0].type === 'text' ? response.content[0].text : '';
+  },
 };
 
 function extractJSON(text: string): string {

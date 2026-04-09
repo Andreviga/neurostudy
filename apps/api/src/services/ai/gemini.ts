@@ -44,6 +44,12 @@ export const geminiService = {
       return [];
     }
   },
+
+  async rawCompletion(prompt: string): Promise<string> {
+    const model = genAI.getGenerativeModel({ model: MODEL });
+    const result = await model.generateContent(prompt);
+    return result.response.text();
+  },
 };
 
 function extractJSON(text: string): string {

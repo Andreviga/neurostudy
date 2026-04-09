@@ -64,6 +64,16 @@ export const openaiService = {
     const parsed = JSON.parse(content);
     return parsed.topics || [];
   },
+
+  async rawCompletion(prompt: string): Promise<string> {
+    const response = await client.chat.completions.create({
+      model: MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
+      max_tokens: 300,
+    });
+    return response.choices[0].message.content || '';
+  },
 };
 
 function extractJSON(text: string): string {

@@ -10,6 +10,7 @@
 import { openaiService } from './openai';
 import { anthropicService } from './anthropic';
 import { geminiService } from './gemini';
+import { buildSubjectDetectionPrompt } from './prompts';
 import { logger } from '../../lib/logger';
 
 export type AIProvider = 'openai' | 'anthropic' | 'gemini';
@@ -166,4 +167,31 @@ export async function generateTopicsFromText(
   });
 
   logger.info('Topics created', { materialId, count: topics.length });
+}
+
+// ─── Subject detection ────────────────────────────────────────────────────────
+
+export interface SubjectDetectionResult {
+  subjectName: string;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  reason: string;
+}
+
+export async function detectSubjectFromText(
+  text: string,
+  existingSubjects: string[]
+): Promise<SubjectDetectionResult> {
+  const provider = (['openai', 'anthropic', 'gemini'] as AIProvider[]).find(isProviderAvailable);
+  if (!provider) throw new Error('No AI provider configured');
+
+  let raw: string;
+  switch (provider) {
+    case 'anthropic': raw = await anthropicService.rawCompletion(buildSubjectDetectionPrompt(text, existingSubjects)); break;
+    case 'gemini':    raw = await geminiService.rawCompletion(buildSubjectDetectionPrompt(text, existingSubjects)); break;
+    default:          raw = await openaiService.rawCompletion(buildSubjectDetectionPrompt(text, existingSubjects));
+  }
+
+  const json = raw.match(/\{[\s\S]*\}/)?.[0];
+  if (!json) throw new Error('Invalid AI response for subject detection');
+  return JSON.parse(json) as SubjectDetectionResult;
 }

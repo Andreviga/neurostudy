@@ -89,9 +89,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-4 pt-4 border-t border-slate-100">
-            <p className="text-xs text-slate-400 text-center">Demo: demo@neurostudy.app / demo1234</p>
-          </div>
+
         </div>
       </div>
     </div>

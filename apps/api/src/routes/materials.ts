@@ -8,7 +8,7 @@ type MaterialType = 'PDF' | 'DOCX' | 'PPTX' | 'TXT' | 'IMAGE' | 'AUDIO' | 'VIDEO
 import { prisma } from '../lib/prisma';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { extractTextFromPDF } from '../services/pdf';
-import { generateTopicsFromText } from '../services/ai';
+import { generateTopicsFromText, detectSubjectFromText } from '../services/ai';
 import { uploadFile } from '../services/storage';
 import { logger } from '../lib/logger';
 import { asyncHandler } from '../lib/async-handler';
@@ -140,6 +140,41 @@ router.post('/url', asyncHandler(async (req: AuthRequest, res: Response) => {
   );
 
   res.status(202).json({ ...material, status: 'processing' });
+}));
+
+// POST /api/materials/detect-subject — detect discipline from text snippet and auto-create subject
+router.post('/detect-subject', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { text } = req.body as { text?: string };
+  if (!text || text.trim().length < 50) {
+    res.status(400).json({ error: 'Provide at least 50 characters of text for detection' });
+    return;
+  }
+
+  // Fetch existing subjects for this user so the AI can match to an existing one
+  const existing = await prisma.subject.findMany({
+    where: { userId: req.userId! },
+    select: { id: true, name: true },
+  });
+  const existingNames = existing.map((s: { id: string; name: string }) => s.name);
+
+  const detection = await detectSubjectFromText(text, existingNames);
+
+  // Check if a subject with the detected name already exists (case-insensitive)
+  const matched = existing.find(
+    (s: { id: string; name: string }) => s.name.toLowerCase() === detection.subjectName.toLowerCase()
+  );
+
+  let subjectId: string;
+  if (matched) {
+    subjectId = matched.id;
+  } else {
+    const created = await prisma.subject.create({
+      data: { name: detection.subjectName, userId: req.userId! },
+    });
+    subjectId = created.id;
+  }
+
+  res.json({ subjectId, subjectName: detection.subjectName, confidence: detection.confidence, reason: detection.reason, isNew: !matched });
 }));
 
 // GET /api/materials/:id
