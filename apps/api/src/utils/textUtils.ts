@@ -5,6 +5,8 @@ export function truncateExtractedText(text: string): {
   truncated: boolean;
   originalLength: number;
 } {
+  // Postgres rejects null bytes in text columns (invalid byte sequence 0x00)
+  text = text.replace(/\u0000/g, '');
   const originalLength = text.length;
   if (text.length <= MAX_CHARS) {
     return { text, truncated: false, originalLength };
