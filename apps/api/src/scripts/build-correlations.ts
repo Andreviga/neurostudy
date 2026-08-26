@@ -14,7 +14,7 @@ import 'dotenv/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { prisma } from '../lib/prisma';
 
-const USER_EMAIL = 'demo@neurostudy.app';
+const USER_EMAIL = process.env.IMPORT_USER_EMAIL || 'andrevigarani@gmail.com';
 const BATCH_SIZE = 60;
 const AI_CALL_DELAY_MS = 8_000;
 const MAX_RETRIES = 8;

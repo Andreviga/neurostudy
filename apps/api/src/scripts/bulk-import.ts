@@ -23,7 +23,7 @@ import type { TopicData } from '../services/ai';
 import { truncateExtractedText, estimateTokenCount } from '../utils/textUtils';
 
 const MATERIAL_DIR = 'D:\\OneDrive\\APP Study\\MATERIAL';
-const USER_EMAIL = 'demo@neurostudy.app';
+const USER_EMAIL = process.env.IMPORT_USER_EMAIL || 'andrevigarani@gmail.com';
 const AI_CALL_DELAY_MS = 15_000; // free-tier pacing between Gemini calls
 const MAX_RETRIES = 8;
 
