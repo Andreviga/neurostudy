@@ -3,7 +3,7 @@ import { GenerateContentInput, GenerateContentOutput, TopicData } from './index'
 import { buildGeneratePrompt, buildTopicExtractionPrompt } from './prompts';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const MODEL = 'gemini-1.5-flash'; // Use gemini-1.5-pro for higher quality
+const MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 
 export const geminiService = {
   async generate(input: GenerateContentInput): Promise<GenerateContentOutput> {

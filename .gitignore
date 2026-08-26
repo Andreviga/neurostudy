@@ -21,6 +21,9 @@ build/
 # Uploads (local storage)
 apps/api/uploads/
 
+# Course PDFs (copyrighted study material — local only)
+MATERIAL/
+
 # Prisma generated client
 apps/api/node_modules/
 

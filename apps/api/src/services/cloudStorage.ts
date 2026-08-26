@@ -58,7 +58,7 @@ export function getGoogleAuthUrl(state: string): string {
     client_id: process.env.GOOGLE_CLIENT_ID!,
     redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
     response_type: 'code',
-    scope: 'https://www.googleapis.com/auth/drive.file',
+    scope: 'https://www.googleapis.com/auth/drive',
     access_type: 'offline',
     prompt: 'consent',
     state,
