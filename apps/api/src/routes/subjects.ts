@@ -70,7 +70,16 @@ router.get('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
     },
   });
   if (!subject) { res.status(404).json({ error: 'Subject not found' }); return; }
-  res.json(subject);
+
+  const studiedTopics = await prisma.studySession.findMany({
+    where: { userId: req.userId!, topic: { subjectId: subject.id } },
+    distinct: ['topicId'],
+    select: { topicId: true },
+  });
+  const totalTopics = subject.topics.length;
+  const progress = totalTopics > 0 ? Math.round((studiedTopics.length / totalTopics) * 100) : 0;
+
+  res.json({ ...subject, progress });
 }));
 
 // PATCH /api/subjects/:id

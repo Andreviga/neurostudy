@@ -47,6 +47,13 @@ export interface Material {
 
 export type Difficulty = 'EASY' | 'MEDIUM' | 'HARD' | 'CRITICAL';
 
+export interface TopicPrerequisite {
+  id: string;
+  title: string;
+  subjectName: string;
+  mastered: boolean;
+}
+
 export interface Topic {
   id: string;
   subjectId: string;
@@ -56,6 +63,9 @@ export interface Topic {
   difficulty: Difficulty;
   order: number;
   subject?: { name: string };
+  material?: { id: string; title: string };
+  prerequisiteTopics?: string[];
+  prerequisites?: TopicPrerequisite[];
   _count?: { quizItems: number; flashcards: number; studySessions: number };
 }
 
@@ -138,9 +148,18 @@ export interface LearningProfile {
   recommendedFormat: StudyFormat;
 }
 
+export interface NextTopicSuggestion {
+  id: string;
+  title: string;
+  difficulty: Difficulty;
+  subject: { name: string; color: string };
+  materialTitle: string | null;
+}
+
 export interface TodayPlan {
   dueReviews: Review[];
   weakTopics: (Topic & { subject: { name: string; color: string } })[];
+  nextTopics?: NextTopicSuggestion[];
   streakDays: number;
   totalMinsToday: number;
 }

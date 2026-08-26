@@ -46,15 +46,27 @@ export function formatScore(score: number): string {
   return `${Math.round(score * 100)}%`;
 }
 
+/** Strip export noise (.docx_RevFinal etc.) from material filenames for display */
+export function cleanMaterialTitle(title: string): string {
+  return title
+    .replace(/\.docx?_?\s*/gi, ' ')
+    .replace(/_?Rev\s*Final.*$/i, '')
+    .replace(/\.pdf$/i, '')
+    .replace(/[_\s]+$/g, '')
+    .trim();
+}
+
 export function isOverdue(dateStr: string): boolean {
   return new Date(dateStr) < new Date();
 }
 
 export function relativeDate(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / 86400000);
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOfDay(new Date(dateStr)) - startOfDay(new Date())) / 86400000);
   if (days === 0) return 'Hoje';
-  if (days === 1) return 'Ontem';
-  if (days < 7) return `${days} dias atrás`;
+  if (days === 1) return 'Amanhã';
+  if (days === -1) return 'Ontem';
+  if (days > 1 && days < 7) return `em ${days} dias`;
+  if (days < -1 && days > -7) return `${-days} dias atrás`;
   return new Date(dateStr).toLocaleDateString('pt-BR');
 }

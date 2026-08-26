@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, Loader2, RefreshCw, CheckCircle2, XCircle,
-  RotateCcw, ChevronRight, Lightbulb, BookOpen
+  RotateCcw, ChevronRight, Lightbulb, BookOpen, Lock, Send, MessageCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -33,7 +33,7 @@ export default function StudySessionPage() {
   const [format, setFormat] = useState<StudyFormat>('SUMMARY_SHORT');
   const [content, setContent] = useState<GeneratedContent | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [phase, setPhase] = useState<'pick' | 'study'>('pick');
+  const [phase, setPhase] = useState<'pick' | 'study' | 'chat'>('pick');
   const startRef = useRef(Date.now());
 
   useEffect(() => {
@@ -77,7 +77,7 @@ export default function StudySessionPage() {
     <div className="p-4 sm:p-6 max-w-3xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => phase === 'study' ? setPhase('pick') : router.back()}
+        <button onClick={() => phase !== 'pick' ? setPhase('pick') : router.back()}
           className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-all">
           <ChevronLeft className="w-5 h-5" />
         </button>
@@ -90,8 +90,47 @@ export default function StudySessionPage() {
       <AnimatePresence mode="wait">
         {phase === 'pick' ? (
           <motion.div key="pick" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            {/* Prerequisites */}
+            {topic.prerequisites && topic.prerequisites.length > 0 && (
+              <div className="card p-4 mb-4 bg-amber-50/50 border-amber-100">
+                <p className="text-xs font-semibold text-slate-600 mb-2">
+                  Pré-requisitos deste tópico
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {topic.prerequisites.map((p) => (
+                    <Link
+                      key={p.id}
+                      href={`/study/${p.id}`}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all hover:shadow-sm',
+                        p.mastered
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                          : 'bg-white border-amber-300 text-amber-700'
+                      )}
+                      title={p.mastered ? 'Você já domina este pré-requisito' : 'Ainda não dominado — estude primeiro'}
+                    >
+                      {p.mastered ? <CheckCircle2 className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                      {p.title}
+                    </Link>
+                  ))}
+                </div>
+                {topic.prerequisites.some((p) => !p.mastered) && (
+                  <p className="text-[11px] text-amber-600 mt-2">
+                    💡 Recomendamos dominar os pré-requisitos marcados com cadeado antes de continuar.
+                  </p>
+                )}
+              </div>
+            )}
+
             <p className="text-sm text-slate-500 mb-4">Como você quer estudar este tópico?</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <button
+                onClick={() => setPhase('chat')}
+                className="card p-4 text-left hover:shadow-md hover:border-brand-200 transition-all group border-brand-100 bg-brand-50/40"
+              >
+                <span className="text-2xl mb-2 block">🧑‍🏫</span>
+                <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">Perguntar ao tutor</p>
+              </button>
               {FORMAT_OPTIONS.map((f) => (
                 <button
                   key={f.value}
@@ -103,6 +142,10 @@ export default function StudySessionPage() {
                 </button>
               ))}
             </div>
+          </motion.div>
+        ) : phase === 'chat' ? (
+          <motion.div key="chat" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            <ChatView topicId={topicId} onBack={() => setPhase('pick')} />
           </motion.div>
         ) : (
           <motion.div key="study" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
@@ -271,6 +314,122 @@ function QuizView({ items, onFinish }: { items: QuizItem[]; onFinish: (score: nu
           <ChevronRight className="w-4 h-4" />
         </button>
       )}
+    </div>
+  );
+}
+
+// ─── Chat view (tutor grounded in the material) ──────────────────────────────
+
+interface ChatMsg { role: 'user' | 'model'; content: string }
+
+function ChatView({ topicId, onBack }: { topicId: string; onBack: () => void }) {
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [input, setInput] = useState('');
+  const [streaming, setStreaming] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages]);
+
+  async function send() {
+    const question = input.trim();
+    if (!question || streaming) return;
+    setInput('');
+    const history = messages;
+    setMessages((m) => [...m, { role: 'user', content: question }, { role: 'model', content: '' }]);
+    setStreaming(true);
+
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('ns_token') : null;
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/topics/${topicId}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ message: question, history }),
+      });
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          const data = line.replace(/^data:\s*/, '').trim();
+          if (!data || data === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.error) throw new Error(parsed.error);
+            if (parsed.text) {
+              setMessages((m) => {
+                const copy = [...m];
+                copy[copy.length - 1] = { role: 'model', content: copy[copy.length - 1].content + parsed.text };
+                return copy;
+              });
+            }
+          } catch (e) {
+            if (e instanceof Error && e.message !== 'Unexpected end of JSON input') throw e;
+          }
+        }
+      }
+    } catch {
+      toast.error('Erro no chat. Tente novamente.');
+      setMessages((m) => m.slice(0, -1));
+    } finally {
+      setStreaming(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="badge bg-brand-50 text-brand-700 inline-flex items-center gap-1">
+          <MessageCircle className="w-3 h-3" />
+          Tutor do material
+        </span>
+        <button onClick={onBack} className="btn-secondary text-xs px-3 py-1.5">Trocar formato</button>
+      </div>
+
+      <div ref={scrollRef} className="card p-4 h-[420px] overflow-y-auto space-y-3">
+        {messages.length === 0 && (
+          <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 gap-2">
+            <MessageCircle className="w-8 h-8 text-brand-200" />
+            <p className="text-sm">Pergunte qualquer coisa sobre este tópico.</p>
+            <p className="text-xs">O tutor responde com base no material da aula — e avisa quando algo não está nele.</p>
+          </div>
+        )}
+        {messages.map((m, i) => (
+          <div key={i} className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
+            <div className={cn(
+              'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed',
+              m.role === 'user' ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'
+            )}>
+              {m.content || (streaming && i === messages.length - 1 ? <Loader2 className="w-4 h-4 animate-spin" /> : '')}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-2">
+        <input
+          className="input flex-1"
+          placeholder="Ex.: Explica esse conceito com um exemplo?"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+          disabled={streaming}
+        />
+        <button onClick={send} disabled={streaming || !input.trim()} className="btn-primary px-4 disabled:opacity-50">
+          <Send className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }

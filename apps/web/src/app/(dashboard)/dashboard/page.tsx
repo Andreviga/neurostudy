@@ -4,11 +4,11 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
   Flame, Clock, Target, TrendingUp, BookOpen,
-  AlertCircle, ChevronRight, Plus, Zap
+  AlertCircle, ChevronRight, Plus, Zap, Play
 } from 'lucide-react';
 import { subjectsApi, sessionsApi, profileApi } from '@/lib/api';
 import { getStoredUser } from '@/lib/auth';
-import { cn, difficultyColor, difficultyLabel, formatDuration, isOverdue } from '@/lib/utils';
+import { cn, cleanMaterialTitle, difficultyColor, difficultyLabel, formatDuration, isOverdue } from '@/lib/utils';
 import type { Subject, SessionStats, TodayPlan } from '@/types';
 
 export default function DashboardPage() {
@@ -104,6 +104,38 @@ export default function DashboardPage() {
           </motion.div>
         ))}
       </div>
+
+      {/* ─── Study next (guided trail) ─────────────────────────────────────── */}
+      {today?.nextTopics && today.nextTopics.length > 0 && (
+        <div className="card p-5 border-brand-100 bg-gradient-to-r from-brand-50/60 to-white">
+          <div className="flex items-center gap-2 mb-4">
+            <Play className="w-4 h-4 text-brand-600" />
+            <h2 className="font-semibold text-slate-900">Continue sua trilha</h2>
+            <span className="text-xs text-slate-400">— próximos tópicos com pré-requisitos já dominados</span>
+          </div>
+          <div className="grid sm:grid-cols-3 gap-3">
+            {today.nextTopics.map((t) => (
+              <Link
+                key={t.id}
+                href={`/study/${t.id}`}
+                className="card p-4 hover:shadow-md hover:border-brand-200 transition-all group bg-white"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: t.subject.color }} />
+                  <span className="text-[11px] text-slate-400 truncate">{t.subject.name}</span>
+                </div>
+                <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700 line-clamp-2">{t.title}</p>
+                {t.materialTitle && (
+                  <p className="text-[11px] text-slate-400 mt-1 line-clamp-1">{cleanMaterialTitle(t.materialTitle)}</p>
+                )}
+                <span className={cn('badge text-[10px] mt-2 inline-block', difficultyColor[t.difficulty])}>
+                  {difficultyLabel[t.difficulty]}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* ─── Due reviews ──────────────────────────────────────────────── */}
