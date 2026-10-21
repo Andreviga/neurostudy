@@ -27,6 +27,7 @@ import profileRouter from './routes/profile';
 import pushRouter from './routes/push';
 import shareRouter from './routes/share';
 import cloudRouter from './routes/cloud';
+import exportRouter from './routes/export';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -66,6 +67,7 @@ app.use('/api/profile', profileRouter);
 app.use('/api/push', pushRouter);
 app.use('/api/share', shareRouter);
 app.use('/api/cloud', cloudRouter);
+app.use('/api/export', exportRouter);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));

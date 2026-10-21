@@ -1,9 +1,30 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { BarChart2, Clock, Target, TrendingUp, BookOpen } from 'lucide-react';
+import { BarChart2, Clock, Target, TrendingUp, BookOpen, Download } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { sessionsApi, subjectsApi, profileApi } from '@/lib/api';
 import { cn, formatDuration, formatScore, formatLabel } from '@/lib/utils';
 import type { SessionStats, Subject, LearningProfile } from '@/types';
+
+async function exportAnki() {
+  try {
+    const token = localStorage.getItem('ns_token');
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/export/anki`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `neurostudy-anki-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Arquivo exportado! No Anki: Arquivo → Importar.');
+  } catch {
+    toast.error('Falha ao exportar. A API está rodando?');
+  }
+}
 
 export default function ProgressPage() {
   const [stats, setStats] = useState<SessionStats | null>(null);
@@ -22,9 +43,15 @@ export default function ProgressPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Seu progresso</h1>
-        <p className="text-slate-500 text-sm mt-0.5">Acompanhe sua evolução e identifique onde melhorar</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Seu progresso</h1>
+          <p className="text-slate-500 text-sm mt-0.5">Acompanhe sua evolução e identifique onde melhorar</p>
+        </div>
+        <button onClick={exportAnki} className="btn-secondary flex-shrink-0" title="Exporta flashcards e quizzes num arquivo que o Anki importa">
+          <Download className="w-4 h-4" />
+          Exportar para Anki
+        </button>
       </div>
 
       {/* ─── Key metrics ──────────────────────────────────────────────────── */}
