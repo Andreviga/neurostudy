@@ -3,7 +3,8 @@ import { GenerateContentInput, GenerateContentOutput, TopicData } from './index'
 import { buildGeneratePrompt, buildTopicExtractionPrompt } from './prompts';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = 'claude-3-haiku-20240307'; // Fast + affordable; swap to claude-3-5-sonnet-20241022 for quality
+// Override with ANTHROPIC_MODEL (e.g. claude-haiku-4-5 for lower cost)
+const MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-5';
 
 export const anthropicService = {
   async generate(input: GenerateContentInput): Promise<GenerateContentOutput> {
@@ -11,7 +12,7 @@ export const anthropicService = {
 
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: 2000,
+      max_tokens: 16000,
       system: 'Você é um tutor educacional especializado. Responda sempre em português brasileiro. Seja didático, claro e engajante.',
       messages: [{ role: 'user', content: prompt }],
     });
@@ -38,7 +39,7 @@ export const anthropicService = {
     const prompt = buildTopicExtractionPrompt(text);
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: 1500,
+      max_tokens: 4000,
       system: 'You are a curriculum expert. Extract study topics and respond with valid JSON only.',
       messages: [{ role: 'user', content: prompt }],
     });
@@ -55,10 +56,42 @@ export const anthropicService = {
   async rawCompletion(prompt: string): Promise<string> {
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: 300,
+      max_tokens: 1000,
       messages: [{ role: 'user', content: prompt }],
     });
     return response.content[0].type === 'text' ? response.content[0].text : '';
+  },
+
+  /**
+   * Streaming tutor chat grounded in the material. Calls onText for each
+   * text chunk as it arrives.
+   */
+  async chatStream(
+    systemPrompt: string,
+    history: { role: 'user' | 'model'; content: string }[],
+    message: string,
+    onText: (text: string) => void
+  ): Promise<void> {
+    const messages = [
+      ...history.map((h) => ({
+        role: (h.role === 'model' ? 'assistant' : 'user') as 'user' | 'assistant',
+        content: h.content,
+      })),
+      { role: 'user' as const, content: message },
+    ];
+
+    const stream = client.messages.stream({
+      model: MODEL,
+      max_tokens: 4000,
+      system: systemPrompt,
+      messages,
+    });
+
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        onText(event.delta.text);
+      }
+    }
   },
 };
 

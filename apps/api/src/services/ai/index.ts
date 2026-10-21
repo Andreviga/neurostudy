@@ -71,8 +71,13 @@ function selectProvider(format: StudyFormat, override?: AIProvider): AIProvider 
   const suggested = TASK_ROUTING[format];
   // Only use suggested if that provider is configured
   if (isProviderAvailable(suggested)) return suggested;
-  // Fallback chain
-  const fallbacks: AIProvider[] = ['openai', 'anthropic', 'gemini'];
+  // Fallback chain: prefer the configured default provider (e.g. free-tier
+  // Gemini) before paid alternatives
+  const def = process.env.DEFAULT_AI_PROVIDER as AIProvider | undefined;
+  const fallbacks: AIProvider[] = [
+    ...(def ? [def] : []),
+    'openai', 'anthropic', 'gemini',
+  ];
   for (const p of fallbacks) {
     if (isProviderAvailable(p)) return p;
   }

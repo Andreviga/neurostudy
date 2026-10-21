@@ -156,36 +156,45 @@ router.post('/:id/chat', asyncHandler(async (req: AuthRequest, res: Response) =>
   const materialText = topic.material?.extractedText ?? topic.summary ?? '';
   const materialTitle = topic.material?.title ?? topic.title;
 
-  if (!process.env.GEMINI_API_KEY) {
-    res.status(503).json({ error: 'Chat requer GEMINI_API_KEY configurada' });
+  const useClaude = !!process.env.ANTHROPIC_API_KEY;
+  if (!useClaude && !process.env.GEMINI_API_KEY) {
+    res.status(503).json({ error: 'Chat requer ANTHROPIC_API_KEY ou GEMINI_API_KEY configurada' });
     return;
   }
 
   const systemPrompt = `Você é um tutor IA especializado. Responda perguntas baseando-se APENAS no material abaixo. Se a resposta não estiver no material, diga isso claramente. Seja didático e use exemplos.\n\nMATERIAL: "${materialTitle}"\n---\n${materialText.slice(0, 10000)}\n---\nResponda sempre em português.`;
-
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({
-    model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
-    systemInstruction: systemPrompt,
-  });
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('X-Accel-Buffering', 'no');
 
   try {
-    const chat = model.startChat({
-      history: history.map((h) => ({
-        role: h.role as 'user' | 'model',
-        parts: [{ text: h.content }],
-      })),
-    });
+    const chatHistory = history.map((h) => ({
+      role: (h.role === 'model' ? 'model' : 'user') as 'user' | 'model',
+      content: h.content,
+    }));
 
-    const result = await chat.sendMessageStream(message);
-    for await (const chunk of result.stream) {
-      const text = chunk.text();
-      if (text) res.write(`data: ${JSON.stringify({ text })}\n\n`);
+    if (useClaude) {
+      const { anthropicService } = await import('../services/ai/anthropic');
+      await anthropicService.chatStream(systemPrompt, chatHistory, message, (text) => {
+        res.write(`data: ${JSON.stringify({ text })}\n\n`);
+      });
+    } else {
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+      const model = genAI.getGenerativeModel({
+        model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
+        systemInstruction: systemPrompt,
+      });
+      const chat = model.startChat({
+        history: chatHistory.map((h) => ({ role: h.role, parts: [{ text: h.content }] })),
+      });
+      const result = await chat.sendMessageStream(message);
+      for await (const chunk of result.stream) {
+        const text = chunk.text();
+        if (text) res.write(`data: ${JSON.stringify({ text })}\n\n`);
+      }
     }
+
     res.write('data: [DONE]\n\n');
     res.end();
   } catch (err) {
