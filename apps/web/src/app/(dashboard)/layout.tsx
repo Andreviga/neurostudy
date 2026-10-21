@@ -4,7 +4,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   Brain, LayoutDashboard, BookOpen, Upload, BarChart2,
-  LogOut, Menu, X, RefreshCcw, ChevronRight, Settings
+  LogOut, Menu, X, RefreshCcw, ChevronRight, Settings, Map as MapIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { clearSession, getStoredUser } from '@/lib/auth';
@@ -15,6 +15,7 @@ const navItems = [
   { href: '/subjects', label: 'Disciplinas', icon: BookOpen },
   { href: '/upload', label: 'Upload', icon: Upload },
   { href: '/reviews', label: 'Revisões', icon: RefreshCcw },
+  { href: '/map', label: 'Mapa', icon: MapIcon },
   { href: '/progress', label: 'Progresso', icon: BarChart2 },
   { href: '/settings', label: 'Configurações', icon: Settings },
 ];

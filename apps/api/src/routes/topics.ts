@@ -6,6 +6,7 @@ import { generateContent } from '../services/ai';
 import { logger } from '../lib/logger';
 import { asyncHandler } from '../lib/async-handler';
 import { getCachedContent, saveContentToCache } from '../utils/contentCache';
+import { selectRelevantExcerpt } from '../utils/textUtils';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const router = Router();
@@ -26,6 +27,39 @@ router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
     orderBy: [{ materialId: 'asc' }, { order: 'asc' }],
   });
   res.json(topics);
+}));
+
+// GET /api/topics/graph — full knowledge graph (nodes + prerequisite edges)
+router.get('/graph', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const [topics, sessions] = await Promise.all([
+    prisma.topic.findMany({
+      where: { subject: { userId: req.userId! } },
+      select: {
+        id: true, title: true, difficulty: true, prerequisiteTopics: true, order: true,
+        materialId: true,
+        subject: { select: { id: true, name: true, color: true, createdAt: true } },
+      },
+      orderBy: [{ subject: { createdAt: 'asc' } }, { materialId: 'asc' }, { order: 'asc' }],
+    }),
+    prisma.studySession.groupBy({
+      by: ['topicId'],
+      where: { userId: req.userId!, cachedContent: null },
+      _max: { score: true },
+    }),
+  ]);
+
+  const best = new Map(sessions.map((s) => [s.topicId, s._max.score ?? 0]));
+  res.json(topics.map((t) => ({
+    id: t.id,
+    title: t.title,
+    difficulty: t.difficulty,
+    prerequisites: t.prerequisiteTopics,
+    subjectId: t.subject.id,
+    subjectName: t.subject.name,
+    color: t.subject.color,
+    studied: best.has(t.id),
+    mastered: (best.get(t.id) ?? 0) >= 0.6,
+  })));
 }));
 
 // GET /api/topics/:id
@@ -50,7 +84,7 @@ router.get('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
     });
     const sessions = await prisma.studySession.groupBy({
       by: ['topicId'],
-      where: { userId: req.userId!, topicId: { in: topic.prerequisiteTopics } },
+      where: { userId: req.userId!, topicId: { in: topic.prerequisiteTopics }, cachedContent: null },
       _max: { score: true },
     });
     const bestScore = new Map(sessions.map((s) => [s.topicId, s._max.score ?? 0]));
@@ -162,7 +196,21 @@ router.post('/:id/chat', asyncHandler(async (req: AuthRequest, res: Response) =>
     return;
   }
 
-  const systemPrompt = `Você é um tutor IA especializado. Responda perguntas baseando-se APENAS no material abaixo. Se a resposta não estiver no material, diga isso claramente. Seja didático e use exemplos.\n\nMATERIAL: "${materialTitle}"\n---\n${materialText.slice(0, 10000)}\n---\nResponda sempre em português.`;
+  const systemPrompt = `Você é um professor particular paciente, especializado em ensinar INICIANTES TOTAIS. O aluno nunca viu este assunto antes.
+
+Como ensinar:
+- Responda baseando-se no material abaixo. Se algo não estiver no material, diga isso claramente — mas então explique o conceito com seu próprio conhecimento, avisando que é complemento.
+- Defina todo termo técnico na primeira vez, em palavras simples.
+- Use exemplos do cotidiano brasileiro antes de exemplos técnicos.
+- Respostas curtas e diretas (2-5 parágrafos no máximo). Nada de paredes de texto.
+- Ao final de cada explicação, faça UMA pergunta simples de verificação para checar se o aluno entendeu (ex: "Pra ver se ficou claro: o que aconteceria se...?").
+- Se o aluno errar ou demonstrar confusão, não repita a mesma explicação — tente por outro ângulo (analogia, exemplo, desenho em texto).
+
+MATERIAL: "${materialTitle}"
+---
+${materialText.slice(0, 10000)}
+---
+Responda sempre em português brasileiro.`;
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -214,37 +262,5 @@ router.post('/:id/chat', asyncHandler(async (req: AuthRequest, res: Response) =>
     res.end();
   }
 }));
-
-/**
- * Pick the ~8k-char window of the material most relevant to the topic,
- * instead of always using the first 8k chars. Scores fixed-size windows by
- * keyword overlap with the topic title/summary and returns the best one.
- */
-function selectRelevantExcerpt(text: string, title: string, summary: string): string {
-  const LIMIT = 8000;
-  if (text.length <= LIMIT) return text;
-
-  const stopwords = new Set(['de', 'da', 'do', 'das', 'dos', 'em', 'no', 'na', 'nos', 'nas', 'para', 'com', 'por', 'uma', 'um', 'os', 'as', 'ao', 'introdução', 'conceitos', 'fundamentos', 'básicos', 'estudo', 'sobre']);
-  const keywords = `${title} ${summary}`
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .split(/[^a-z0-9]+/)
-    .filter((w) => w.length >= 4 && !stopwords.has(w));
-  if (keywords.length === 0) return text.slice(0, LIMIT);
-
-  const normalized = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  const STEP = 4000;
-  let bestStart = 0, bestScore = -1;
-  for (let start = 0; start < normalized.length; start += STEP) {
-    const window = normalized.slice(start, start + LIMIT);
-    let score = 0;
-    for (const kw of keywords) {
-      let i = window.indexOf(kw);
-      while (i !== -1) { score++; i = window.indexOf(kw, i + kw.length); }
-    }
-    if (score > bestScore) { bestScore = score; bestStart = start; }
-  }
-  return text.slice(bestStart, bestStart + LIMIT);
-}
 
 export default router;

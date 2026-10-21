@@ -33,7 +33,7 @@ export default function StudySessionPage() {
   const [format, setFormat] = useState<StudyFormat>('SUMMARY_SHORT');
   const [content, setContent] = useState<GeneratedContent | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [phase, setPhase] = useState<'pick' | 'study' | 'chat'>('pick');
+  const [phase, setPhase] = useState<'pick' | 'study' | 'chat' | 'lesson'>('pick');
   const startRef = useRef(Date.now());
 
   useEffect(() => {
@@ -122,7 +122,23 @@ export default function StudySessionPage() {
               </div>
             )}
 
-            <p className="text-sm text-slate-500 mb-4">Como você quer estudar este tópico?</p>
+            {/* Guided lesson — the recommended path for beginners */}
+            <button
+              onClick={() => setPhase('lesson')}
+              className="card w-full p-5 mb-5 text-left bg-gradient-to-r from-brand-600 to-indigo-600 border-0 hover:shadow-lg transition-all group"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-white font-bold text-base">▶ Começar a aula</p>
+                  <p className="text-brand-100 text-xs mt-1">
+                    Entender → Ver na prática → Praticar com quiz. Eu te guio passo a passo.
+                  </p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-white/70 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </button>
+
+            <p className="text-sm text-slate-500 mb-4">Ou escolha um formato específico:</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <button
                 onClick={() => setPhase('chat')}
@@ -146,6 +162,10 @@ export default function StudySessionPage() {
         ) : phase === 'chat' ? (
           <motion.div key="chat" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <ChatView topicId={topicId} onBack={() => setPhase('pick')} />
+          </motion.div>
+        ) : phase === 'lesson' ? (
+          <motion.div key="lesson" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            <LessonView topicId={topicId} onExit={() => setPhase('pick')} />
           </motion.div>
         ) : (
           <motion.div key="study" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
@@ -318,6 +338,154 @@ function QuizView({ items, onFinish }: { items: QuizItem[]; onFinish: (score: nu
   );
 }
 
+// ─── Guided lesson: entender → ver na prática → praticar ────────────────────
+
+const LESSON_STEPS: { format: StudyFormat; title: string; intro: string }[] = [
+  { format: 'SUMMARY_MEDIUM', title: 'Entender', intro: 'Primeiro, vamos entender o que é e para que serve.' },
+  { format: 'PRACTICAL_EXAMPLE', title: 'Ver na prática', intro: 'Agora veja como isso aparece no mundo real.' },
+  { format: 'QUIZ', title: 'Praticar', intro: 'Hora de testar o que você aprendeu — sem medo de errar!' },
+];
+
+function LessonView({ topicId, onExit }: { topicId: string; onExit: () => void }) {
+  const router = useRouter();
+  const [step, setStep] = useState(0);
+  const [content, setContent] = useState<GeneratedContent | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [finalScore, setFinalScore] = useState<number | null>(null);
+  const [nextTopic, setNextTopic] = useState<{ id: string; title: string } | null>(null);
+  const lessonStart = useRef(Date.now());
+
+  const current = LESSON_STEPS[step];
+  const done = step >= LESSON_STEPS.length;
+
+  useEffect(() => {
+    if (done) return;
+    let cancelled = false;
+    setLoading(true);
+    setContent(null);
+    topicsApi.generate(topicId, LESSON_STEPS[step].format)
+      .then((c) => { if (!cancelled) setContent(c); })
+      .catch(() => { if (!cancelled) toast.error('Falha ao gerar esta etapa. Tente novamente.'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [topicId, step, done]);
+
+  async function finishLesson(score: number) {
+    setFinalScore(score);
+    const durationSecs = Math.round((Date.now() - lessonStart.current) / 1000);
+    await sessionsApi.record({
+      topicId,
+      format: 'QUIZ',
+      durationSecs,
+      completionRate: 1,
+      score,
+      aiProvider: content?.provider,
+      aiModel: content?.model,
+    }).catch(() => {});
+    // Suggest the next lesson on the trail
+    try {
+      const { profileApi } = await import('@/lib/api');
+      const today = await profileApi.today();
+      const next = today.nextTopics?.find((t) => t.id !== topicId);
+      if (next) setNextTopic({ id: next.id, title: next.title });
+    } catch {}
+    setStep(LESSON_STEPS.length);
+  }
+
+  if (done) {
+    const pct = Math.round((finalScore ?? 0) * 100);
+    const good = (finalScore ?? 0) >= 0.6;
+    return (
+      <div className="card p-8 text-center space-y-4">
+        <div className="text-4xl">{good ? '🎉' : '💪'}</div>
+        <h2 className="text-xl font-bold text-slate-900">Aula concluída — {pct}% de acerto</h2>
+        <p className="text-sm text-slate-500">
+          {good
+            ? 'Mandou bem! Este tópico entrou na sua agenda de revisão para você não esquecer.'
+            : 'Sem problema — errar faz parte. Revise a explicação ou pergunte ao tutor, e refaça o quiz quando quiser.'}
+        </p>
+        <div className="space-y-2 pt-2">
+          {good && nextTopic && (
+            <button
+              onClick={() => { router.push(`/study/${nextTopic.id}`); }}
+              className="btn-primary w-full py-3"
+            >
+              Próxima aula: {nextTopic.title}
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+          {!good && (
+            <button onClick={() => { setStep(0); setFinalScore(null); }} className="btn-primary w-full py-3">
+              <RotateCcw className="w-4 h-4" />
+              Rever a explicação
+            </button>
+          )}
+          <button onClick={() => router.push('/dashboard')} className="btn-secondary w-full py-3">
+            Voltar ao painel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Step progress */}
+      <div className="flex items-center gap-2">
+        {LESSON_STEPS.map((s, i) => (
+          <div key={s.title} className="flex-1">
+            <div className={cn('h-1.5 rounded-full', i < step ? 'bg-emerald-400' : i === step ? 'bg-brand-500' : 'bg-slate-200')} />
+            <p className={cn('text-[11px] mt-1 text-center', i === step ? 'text-brand-700 font-semibold' : 'text-slate-400')}>
+              {i + 1}. {s.title}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-sm text-slate-500">{current.intro}</p>
+
+      {loading ? (
+        <div className="card p-16 flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
+          <p className="text-sm text-slate-500">Preparando a etapa “{current.title}”...</p>
+        </div>
+      ) : content ? (
+        current.format === 'QUIZ' && content.quizItems?.length ? (
+          <QuizView items={content.quizItems} onFinish={finishLesson} />
+        ) : (
+          <div className="space-y-4">
+            <div className="card p-6 prose prose-slate max-w-none">
+              <pre className="whitespace-pre-wrap text-sm text-slate-700 font-sans leading-relaxed">{content.content}</pre>
+            </div>
+            <button onClick={() => setStep((s) => s + 1)} className="btn-primary w-full py-3">
+              Entendi, próxima etapa
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        )
+      ) : (
+        <button
+          onClick={() => {
+            setLoading(true);
+            topicsApi.generate(topicId, current.format)
+              .then(setContent)
+              .catch(() => toast.error('Falha ao gerar. Tente novamente.'))
+              .finally(() => setLoading(false));
+          }}
+          className="btn-secondary w-full py-3"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Tentar gerar de novo
+        </button>
+      )}
+
+      <button onClick={onExit} className="text-xs text-slate-400 hover:text-slate-600 mx-auto block">
+        Sair da aula guiada
+      </button>
+    </div>
+  );
+}
+
 // ─── Chat view (tutor grounded in the material) ──────────────────────────────
 
 interface ChatMsg { role: 'user' | 'model'; content: string }
@@ -332,8 +500,8 @@ function ChatView({ topicId, onBack }: { topicId: string; onBack: () => void }) 
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
-  async function send() {
-    const question = input.trim();
+  async function send(preset?: string) {
+    const question = (preset ?? input).trim();
     if (!question || streaming) return;
     setInput('');
     const history = messages;
@@ -399,10 +567,25 @@ function ChatView({ topicId, onBack }: { topicId: string; onBack: () => void }) 
 
       <div ref={scrollRef} className="card p-4 h-[420px] overflow-y-auto space-y-3">
         {messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 gap-2">
+          <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 gap-3">
             <MessageCircle className="w-8 h-8 text-brand-200" />
-            <p className="text-sm">Pergunte qualquer coisa sobre este tópico.</p>
-            <p className="text-xs">O tutor responde com base no material da aula — e avisa quando algo não está nele.</p>
+            <p className="text-sm">Não sabe por onde começar? Toque numa pergunta:</p>
+            <div className="flex flex-wrap justify-center gap-2 max-w-md">
+              {[
+                'Me explica do zero, como se eu nunca tivesse visto isso',
+                'Por que eu preciso aprender isso? Onde se usa?',
+                'Me dá um exemplo do dia a dia',
+                'Quais erros os iniciantes mais cometem aqui?',
+              ].map((q) => (
+                <button
+                  key={q}
+                  onClick={() => send(q)}
+                  className="text-xs px-3 py-2 rounded-xl border border-brand-200 text-brand-700 bg-brand-50/50 hover:bg-brand-100 transition-colors"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {messages.map((m, i) => (
@@ -426,7 +609,7 @@ function ChatView({ topicId, onBack }: { topicId: string; onBack: () => void }) 
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
           disabled={streaming}
         />
-        <button onClick={send} disabled={streaming || !input.trim()} className="btn-primary px-4 disabled:opacity-50">
+        <button onClick={() => send()} disabled={streaming || !input.trim()} className="btn-primary px-4 disabled:opacity-50">
           <Send className="w-4 h-4" />
         </button>
       </div>

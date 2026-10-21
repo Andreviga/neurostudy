@@ -1,5 +1,13 @@
 import { StudyFormat } from './index';
 
+const BEGINNER_PREAMBLE = `Você está ensinando um estudante INICIANTE TOTAL — assuma que ele nunca viu este assunto antes.
+Regras de ouro:
+- Defina TODO termo técnico na primeira vez que aparecer, em palavras simples.
+- Comece pelo "porquê": para que isso serve na vida real, antes do "como".
+- Use exemplos do cotidiano brasileiro antes de exemplos técnicos.
+- Frases curtas. Nada de jargão sem explicação. Nunca escreva "como vimos" ou "obviamente".
+- Quando houver código, explique linha por linha o que cada parte faz.`;
+
 export function buildGeneratePrompt(
   topicTitle: string,
   topicSummary: string,
@@ -20,6 +28,7 @@ ${materialText ? `\nTrecho do material:\n${materialText.slice(0, 4000)}` : ''}
     ANALOGY: `Explique o tópico abaixo usando pelo menos 2 analogias criativas com situações do dia a dia. Depois, conecte as analogias de volta ao conceito real.`,
     PRACTICAL_EXAMPLE: `Crie 3 exemplos práticos e aplicados do tópico abaixo. Cada exemplo deve mostrar como o conceito é usado na prática.`,
     QUIZ: `Crie um quiz com 5 questões de múltipla escolha sobre o tópico abaixo.
+As questões devem ir da mais fácil para a mais difícil. A "explanation" deve ENSINAR: explique por que a resposta certa está certa E por que as erradas estão erradas, em linguagem de iniciante.
 
 Responda APENAS com JSON válido no seguinte formato:
 {
@@ -28,7 +37,7 @@ Responda APENAS com JSON válido no seguinte formato:
       "question": "Pergunta aqui?",
       "options": ["Opção A", "Opção B", "Opção C", "Opção D"],
       "correctIndex": 0,
-      "explanation": "Explicação da resposta correta"
+      "explanation": "Explicação didática da resposta"
     }
   ]
 }`,
@@ -50,7 +59,7 @@ Responda APENAS com JSON válido no seguinte formato:
       └── Detalhe 2.1`,
   };
 
-  return `${formatInstructions[format]}\n\n${context}`;
+  return `${BEGINNER_PREAMBLE}\n\n${formatInstructions[format]}\n\n${context}`;
 }
 
 export function buildSubjectDetectionPrompt(text: string, existingSubjects: string[]): string {

@@ -12,7 +12,7 @@ router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
   const [profile, realTotals] = await Promise.all([
     prisma.learningProfile.findUnique({ where: { userId: req.userId! } }),
     prisma.studySession.aggregate({
-      where: { userId: req.userId! },
+      where: { userId: req.userId!, cachedContent: null },
       _count: { id: true },
       _sum: { durationSecs: true },
     }),
@@ -42,13 +42,14 @@ router.get('/today', asyncHandler(async (req: AuthRequest, res: Response) => {
     prisma.studySession.aggregate({
       where: {
         userId: req.userId!,
+        cachedContent: null,
         createdAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
       },
       _sum: { durationSecs: true },
     }),
     prisma.studySession.groupBy({
       by: ['topicId'],
-      where: { userId: req.userId! },
+      where: { userId: req.userId!, cachedContent: null },
       _max: { score: true },
     }),
   ]);

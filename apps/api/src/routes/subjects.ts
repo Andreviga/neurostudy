@@ -35,7 +35,7 @@ router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
     subjects.map(async (s: typeof subjects[number]) => {
       const totalTopics = s._count.topics;
       const studiedTopics = await prisma.studySession.findMany({
-        where: { userId: req.userId!, topic: { subjectId: s.id } },
+        where: { userId: req.userId!, topic: { subjectId: s.id }, cachedContent: null },
         distinct: ['topicId'],
       });
       const progress = totalTopics > 0 ? (studiedTopics.length / totalTopics) * 100 : 0;
@@ -72,7 +72,7 @@ router.get('/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
   if (!subject) { res.status(404).json({ error: 'Subject not found' }); return; }
 
   const studiedTopics = await prisma.studySession.findMany({
-    where: { userId: req.userId!, topic: { subjectId: subject.id } },
+    where: { userId: req.userId!, topic: { subjectId: subject.id }, cachedContent: null },
     distinct: ['topicId'],
     select: { topicId: true },
   });

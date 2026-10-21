@@ -57,7 +57,7 @@ export async function updateLearningProfile(userId: string, session: StudySessio
 
   // Detect weak topics: avg score < 0.5 in last 3 sessions
   const recentSessions = await prisma.studySession.findMany({
-    where: { userId, topicId: session.topicId },
+    where: { userId, topicId: session.topicId, cachedContent: null },
     orderBy: { createdAt: 'desc' },
     take: 3,
   });

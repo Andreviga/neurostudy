@@ -54,7 +54,7 @@ router.post('/', asyncHandler(async (req: AuthRequest, res: Response) => {
 router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
   const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
   const sessions = await prisma.studySession.findMany({
-    where: { userId: req.userId! },
+    where: { userId: req.userId!, cachedContent: null },
     include: { topic: { select: { title: true, subject: { select: { name: true } } } } },
     orderBy: { createdAt: 'desc' },
     take: limit,
@@ -65,13 +65,13 @@ router.get('/', asyncHandler(async (req: AuthRequest, res: Response) => {
 // GET /api/sessions/stats — aggregated stats for dashboard
 router.get('/stats', asyncHandler(async (req: AuthRequest, res: Response) => {
   const [totalSessions, totalMins, avgScore, bySubject] = await Promise.all([
-    prisma.studySession.count({ where: { userId: req.userId! } }),
+    prisma.studySession.count({ where: { userId: req.userId!, cachedContent: null } }),
     prisma.studySession.aggregate({
-      where: { userId: req.userId! },
+      where: { userId: req.userId!, cachedContent: null },
       _sum: { durationSecs: true },
     }),
     prisma.studySession.aggregate({
-      where: { userId: req.userId!, score: { not: null } },
+      where: { userId: req.userId!, score: { not: null }, cachedContent: null },
       _avg: { score: true },
     }),
     prisma.$queryRaw`
@@ -80,6 +80,7 @@ router.get('/stats', asyncHandler(async (req: AuthRequest, res: Response) => {
       JOIN topics t ON ss."topicId" = t.id
       JOIN subjects s ON t."subjectId" = s.id
       WHERE ss."userId" = ${req.userId!}
+        AND ss."cachedContent" IS NULL
         AND ss."createdAt" > NOW() - INTERVAL '7 days'
       GROUP BY s.name
     `,
