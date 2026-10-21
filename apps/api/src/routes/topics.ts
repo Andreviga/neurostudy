@@ -174,12 +174,23 @@ router.post('/:id/chat', asyncHandler(async (req: AuthRequest, res: Response) =>
       content: h.content,
     }));
 
+    let claudeOk = false;
     if (useClaude) {
-      const { anthropicService } = await import('../services/ai/anthropic');
-      await anthropicService.chatStream(systemPrompt, chatHistory, message, (text) => {
-        res.write(`data: ${JSON.stringify({ text })}\n\n`);
-      });
-    } else {
+      try {
+        const { anthropicService } = await import('../services/ai/anthropic');
+        await anthropicService.chatStream(systemPrompt, chatHistory, message, (text) => {
+          claudeOk = true;
+          res.write(`data: ${JSON.stringify({ text })}\n\n`);
+        });
+        claudeOk = true;
+      } catch (err) {
+        // Credits exhausted or Claude unavailable — fall back to Gemini if
+        // nothing was streamed yet
+        logger.warn('Claude chat failed, falling back to Gemini', { err: String(err) });
+        if (claudeOk || !process.env.GEMINI_API_KEY) throw err;
+      }
+    }
+    if (!claudeOk) {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
       const model = genAI.getGenerativeModel({
         model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
